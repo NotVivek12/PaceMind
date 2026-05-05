@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
+import NavBar from '@/components/NavBar';
 import './globals.css';
 import ErrorBoundary from '@/components/ErrorBoundary';
 
@@ -24,6 +25,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${inter.variable} h-full`}>
       <body className="min-h-full bg-[#0a0a0f] text-white antialiased">
+        <NavBar />
         <ErrorBoundary>{children}</ErrorBoundary>
       </body>
     </html>
