@@ -18,6 +18,7 @@ class NextQuestionRequest(BaseModel):
     current_mood: MoodState
     concept_id: str
     previous_performance: Optional[PerformanceHistory] = None
+    wrong_streak: Optional[int] = Field(default=None, ge=0)
 
 class Concept(BaseModel):
     id: str

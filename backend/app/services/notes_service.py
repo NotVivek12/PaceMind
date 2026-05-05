@@ -6,7 +6,7 @@ Extracts text from PDF files and sends to LLM for concept extraction.
 import io
 import json
 import structlog
-from .ai_service import call_openrouter, extract_json
+from .ai_service import call_llm, extract_json
 
 logger = structlog.get_logger()
 
@@ -65,7 +65,7 @@ Rules:
 - Order concepts so prerequisites come first
 - Use kebab-case for id slugs"""
 
-    content = await call_openrouter(prompt)
+    content = await call_llm(prompt)
     try:
         parsed = json.loads(extract_json(content))
         return parsed["concepts"]

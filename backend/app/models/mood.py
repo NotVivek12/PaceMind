@@ -10,14 +10,12 @@ class MoodSnapshot(BaseModel):
     timestamp: datetime
     contributing_signals: Dict[str, Any]
 
-
 class KeystrokeSignals(BaseModel):
     typing_speed_cps: float = Field(ge=0)
     backspace_count: int = Field(ge=0)
     pause_count: int = Field(ge=0)
     input_events: int = Field(ge=0)
     elapsed_ms: int = Field(ge=0)
-
 
 class FaceExpressionScores(BaseModel):
     neutral: float = 0.0
@@ -28,15 +26,23 @@ class FaceExpressionScores(BaseModel):
     disgusted: float = 0.0
     surprised: float = 0.0
 
+class MoodRequest(BaseModel):
+    # Keystroke dynamics
+    typing_speed_wpm:  Optional[float] = None
+    error_rate_pct:    Optional[float] = None
+    backspace_rate:    Optional[float] = None
+    pause_seconds:     Optional[float] = None
 
-class MoodSignalRequest(BaseModel):
-    keystroke: KeystrokeSignals
-    expressions: Optional[FaceExpressionScores] = None
-    override_mood: Optional[MoodState] = None
+    # Webcam / face-api.js
+    face_expression:   Optional[str]   = None
+    face_confidence:   Optional[float] = None
 
+    # Response timing
+    response_time_ms:  Optional[float] = None
 
-class MoodSignalResponse(BaseModel):
-    mood: MoodState
-    confidence: float
-    source: Literal["aggregate", "override"]
-    dominant_expression: Optional[str] = None
+    # General
+    recent_wrong_answers: Optional[int] = None
+    session_id:        Optional[str]   = None
+
+    # Demo override — bypasses inference entirely
+    override:          Optional[str]   = None

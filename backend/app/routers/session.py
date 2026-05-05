@@ -40,6 +40,7 @@ async def session_next_question(req: NextQuestionRequest):
             current_mood=req.current_mood,
             history_correct=perf.correct if perf else 0,
             history_total=perf.total if perf else 0,
+            wrong_streak=req.wrong_streak or 0,
         )
         return result
     except ValueError as e:

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { motion } from 'framer-motion';
 import { evaluateMoodSignals, evaluateSession, getNextQuestion, gradeAnswer } from '@/lib/api';
 import type { SessionData } from '@/app/page';
 import type { MoodState, Concept, Intervention, FaceExpressionScores, KeystrokeSignals } from '@/types';
@@ -24,6 +25,13 @@ export default function SessionView({ session, onEnd }: Props) {
   const [mood, setMood] = useState<MoodState>('Flow');
   const [overrideMood, setOverrideMood] = useState<MoodState | null>(null);
   const [answer, setAnswer] = useState('');
+  const [options, setOptions] = useState<string[]>([]);
+  const [selectedOptionIndex, setSelectedOptionIndex] = useState<number | null>(null);
+  const [correctIndex, setCorrectIndex] = useState<number | null>(null);
+  const [timeLeft, setTimeLeft] = useState(30);
+  const [timerActive, setTimerActive] = useState(false);
+  const [wrongStreak, setWrongStreak] = useState(0);
+  const [coachPulse, setCoachPulse] = useState(0);
   const [loading, setLoading] = useState(true);
   const [correct, setCorrect] = useState(0);
   const [total, setTotal] = useState(0);
@@ -53,6 +61,7 @@ export default function SessionView({ session, onEnd }: Props) {
   });
   const lastLogRef = useRef(0);
   const isPostingMoodRef = useRef(false);
+  const lastMoodRef = useRef<MoodState>('Flow');
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const faceApiRef = useRef<typeof import('face-api.js') | null>(null);
@@ -117,6 +126,16 @@ export default function SessionView({ session, onEnd }: Props) {
       default:
         return 'Confused';
     }
+  }
+
+  function normalizeOptions(raw?: string[]): string[] {
+    const cleaned = (raw ?? []).map((item) => item.trim()).filter(Boolean);
+    const base = cleaned.slice(0, 4);
+    const fillers = ['Option A', 'Option B', 'Option C', 'Option D'];
+    while (base.length < 4) {
+      base.push(fillers[base.length]);
+    }
+    return base;
   }
 
   async function loadFaceModels() {
@@ -255,6 +274,34 @@ export default function SessionView({ session, onEnd }: Props) {
   }, [overrideMood]);
 
   useEffect(() => {
+    if (mood !== lastMoodRef.current) {
+      lastMoodRef.current = mood;
+      setCoachPulse((value) => value + 1);
+    }
+  }, [mood]);
+
+  useEffect(() => {
+    if (intervention?.coachMessage) {
+      setCoachPulse((value) => value + 1);
+    }
+  }, [intervention?.coachMessage]);
+
+  useEffect(() => {
+    if (!timerActive) return;
+    const interval = setInterval(() => {
+      setTimeLeft((prev) => Math.max(0, prev - 1));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [timerActive]);
+
+  useEffect(() => {
+    if (!timerActive) return;
+    if (timeLeft <= 0) {
+      handleTimeout();
+    }
+  }, [timeLeft, timerActive]);
+
+  useEffect(() => {
     const interval = setInterval(async () => {
       if (isPostingMoodRef.current) return;
       if (keystrokeSignals.input_events === 0 && !expressionScores) return;
@@ -279,6 +326,17 @@ export default function SessionView({ session, onEnd }: Props) {
 
   useEffect(() => () => stopCamera(), []);
 
+  function handleTimeout() {
+    if (showFeedback || isGrading) return;
+    setTimerActive(false);
+    setTimeLeft(0);
+    setIsCorrect(false);
+    setFeedbackText('Time is up. Try the next one.');
+    setShowFeedback(true);
+    setTotal((value) => value + 1);
+    setWrongStreak((value) => value + 1);
+  }
+
   async function loadNextQuestion() {
     if (!currentConcept) return;
     setLoading(true);
@@ -286,6 +344,11 @@ export default function SessionView({ session, onEnd }: Props) {
     setShowFeedback(false);
     setFeedbackText('');
     setIsCorrect(null);
+    setOptions([]);
+    setSelectedOptionIndex(null);
+    setCorrectIndex(null);
+    setTimerActive(false);
+    setTimeLeft(30);
     resetKeystrokeStats();
     startTimeRef.current = Date.now();
     try {
@@ -293,42 +356,67 @@ export default function SessionView({ session, onEnd }: Props) {
         current_mood: mood,
         concept_id: currentConcept.concept,
         previous_performance: { correct, total },
+        wrong_streak: wrongStreak,
       });
       setCurrentQuestion(res.questionText);
       setIntervention(res.intervention);
+      setOptions(normalizeOptions(res.options));
+      setCorrectIndex(
+        typeof res.correctIndex === 'number' ? res.correctIndex : null,
+      );
+      setSelectedOptionIndex(null);
+      setTimeLeft(30);
+      setTimerActive(true);
     } catch (e) {
       setCurrentQuestion('Describe the key characteristics of this concept.');
       setIntervention(null);
+      setOptions(normalizeOptions());
+      setCorrectIndex(null);
+      setSelectedOptionIndex(null);
+      setTimeLeft(30);
+      setTimerActive(true);
     } finally {
       setLoading(false);
-      setTimeout(() => answerRef.current?.focus(), 100);
     }
   }
 
   async function handleSubmit() {
-    if (!answer.trim() || showFeedback || isGrading) return;
+    if (selectedOptionIndex === null || showFeedback || isGrading) return;
     setIsGrading(true);
+    setTimerActive(false);
 
     try {
-      const gradeRes = await gradeAnswer({
-        question_text: currentQuestion,
-        answer_text: answer
-      });
+      const selectedText = options[selectedOptionIndex] ?? '';
+      let answeredCorrectly = false;
+      let feedback = '';
+
+      if (typeof correctIndex === 'number' && options[correctIndex]) {
+        answeredCorrectly = selectedOptionIndex === correctIndex;
+        feedback = answeredCorrectly
+          ? 'Correct. Nice work.'
+          : `Not quite. Correct answer: ${options[correctIndex]}`;
+      } else {
+        const gradeRes = await gradeAnswer({
+          question_text: currentQuestion,
+          answer_text: selectedText,
+        });
+        answeredCorrectly = gradeRes.is_correct;
+        feedback = gradeRes.feedback;
+      }
 
       const responseTimeMs = Date.now() - startTimeRef.current;
-      const charCount = answer.length;
-      const keystrokeSpeed = responseTimeMs > 0 ? charCount / (responseTimeMs / 1000) : 0;
       const signals = getKeystrokeSignals();
-
-      const answeredCorrectly = gradeRes.is_correct;
+      const keystrokeSpeed = signals.typing_speed_cps;
       setIsCorrect(answeredCorrectly);
-      setFeedbackText(gradeRes.feedback);
+      setFeedbackText(feedback);
       setShowFeedback(true);
 
       const newCorrect = answeredCorrectly ? correct + 1 : correct;
       const newTotal = total + 1;
+      const newWrongStreak = answeredCorrectly ? 0 : wrongStreak + 1;
       setCorrect(newCorrect);
       setTotal(newTotal);
+      setWrongStreak(newWrongStreak);
 
       // Infer mood
       try {
@@ -367,6 +455,11 @@ export default function SessionView({ session, onEnd }: Props) {
     setShowFeedback(false);
     setFeedbackText('');
     setIsCorrect(null);
+    setOptions([]);
+    setSelectedOptionIndex(null);
+    setCorrectIndex(null);
+    setTimerActive(false);
+    setTimeLeft(30);
     resetKeystrokeStats();
     startTimeRef.current = Date.now();
     try {
@@ -375,20 +468,34 @@ export default function SessionView({ session, onEnd }: Props) {
         current_mood: mood,
         concept_id: nextConcept.concept,
         previous_performance: { correct, total },
+        wrong_streak: wrongStreak,
       });
       setCurrentQuestion(res.questionText);
       setIntervention(res.intervention);
+      setOptions(normalizeOptions(res.options));
+      setCorrectIndex(
+        typeof res.correctIndex === 'number' ? res.correctIndex : null,
+      );
+      setSelectedOptionIndex(null);
+      setTimeLeft(30);
+      setTimerActive(true);
     } catch (e) {
       setCurrentQuestion('Describe the key characteristics of this concept.');
       setIntervention(null);
+      setOptions(normalizeOptions());
+      setCorrectIndex(null);
+      setSelectedOptionIndex(null);
+      setTimeLeft(30);
+      setTimerActive(true);
     } finally {
       setLoading(false);
-      setTimeout(() => answerRef.current?.focus(), 100);
     }
   }
 
   const moodCfg = MOOD_CONFIG[mood];
   const progress = ((conceptIndex) / session.concepts.length) * 100;
+  const timePct = Math.max(0, Math.min(100, (timeLeft / 30) * 100));
+  const accuracyPct = total > 0 ? Math.round((correct / total) * 100) : 0;
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -399,12 +506,25 @@ export default function SessionView({ session, onEnd }: Props) {
           <span className="text-sm font-medium text-white">{session.topic}</span>
         </div>
         <div className="flex items-center gap-4">
-          {/* Mood badge */}
-          <div className={`flex items-center gap-1.5 text-sm font-medium ${moodCfg.color}`}>
-            <span>{moodCfg.emoji}</span>
+          {/* Mood badge - animated pulse on change */}
+          <motion.div
+            key={`mood-${mood}-${coachPulse}`}
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ type: "spring", stiffness: 400, damping: 10 }}
+            className={`flex items-center gap-1.5 text-sm font-medium ${moodCfg.color} drop-shadow-lg`}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+          >
+            <motion.span
+              animate={{ scale: [1, 1.2, 1], opacity: [1, 0.8, 1] }}
+              transition={{ duration: 1, repeat: Infinity, repeatType: "reverse" }}
+            >
+              {moodCfg.emoji}
+            </motion.span>
             <span>{moodCfg.label}</span>
             {overrideMood && <span className="text-xs text-white/40">Manual</span>}
-          </div>
+          </motion.div>
 
           {/* Webcam badge */}
           <div className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/60">
@@ -487,101 +607,208 @@ export default function SessionView({ session, onEnd }: Props) {
       </div>
 
       {/* Main content */}
-      <main className="flex-1 flex flex-col items-center justify-center px-6 py-12 max-w-2xl mx-auto w-full">
-
-        {/* Concept label */}
-        {currentConcept && (
-          <div className="self-start mb-6">
-            <span className="text-xs text-white/40 uppercase tracking-wider">Concept {conceptIndex + 1} of {session.concepts.length}</span>
-            <h2 className="text-xl font-semibold text-white mt-1">{currentConcept.concept}</h2>
-            <div className="flex gap-1 mt-2">
-              {Array.from({ length: currentConcept.difficulty }).map((_, i) => (
-                <span key={i} className="w-2 h-2 rounded-full bg-purple-500" />
-              ))}
-              {Array.from({ length: Math.max(0, 5 - currentConcept.difficulty) }).map((_, i) => (
-                <span key={i} className="w-2 h-2 rounded-full bg-white/10" />
-              ))}
-            </div>
-          </div>
-        )}
-
-        {loading ? (
-          <div className="flex flex-col items-center gap-4 py-20">
-            <div className="w-10 h-10 rounded-full border-4 border-purple-500 border-t-transparent animate-spin" />
-            <p className="text-white/40">Generating question…</p>
-          </div>
-        ) : (
-          <>
-            {/* Coach intervention */}
-            {intervention && intervention.coachMessage && (
-              <div className="w-full mb-6 rounded-xl border border-purple-500/30 bg-purple-500/10 px-5 py-4">
-                <p className="text-sm text-purple-300 leading-relaxed">
-                  <span className="font-semibold">🤖 Coach: </span>
-                  {intervention.coachMessage}
-                </p>
-              </div>
-            )}
-
-            {/* Question */}
-            <div className="w-full mb-6 rounded-2xl border border-white/10 bg-white/5 p-6">
-              <p className="text-white text-lg leading-relaxed">{currentQuestion}</p>
-            </div>
-
-            {/* Answer */}
-            <textarea
-              id="answer-input"
-              ref={answerRef}
-              value={answer}
-              onChange={(e) => setAnswer(e.target.value)}
-              disabled={showFeedback}
-              placeholder="Type your answer here…"
-              rows={4}
-              className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder-white/30 outline-none focus:border-purple-500/60 transition-colors resize-none mb-4 disabled:opacity-50"
-            />
-
-            {/* Feedback */}
-            {showFeedback && (
-              <div className={`w-full mb-4 rounded-xl border px-5 py-4 text-sm ${
-                isCorrect
-                  ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
-                  : 'border-orange-500/30 bg-orange-500/10 text-orange-300'
-              }`}>
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="font-semibold text-base">{isCorrect ? '✓ Correct!' : '✗ Keep trying!'}</span>
-                  <span className={`font-semibold ml-auto ${moodCfg.color}`}>Mood: {moodCfg.emoji} {moodCfg.label}</span>
+      <main className="flex-1 px-6 py-12">
+        <div className="mx-auto w-full max-w-5xl grid gap-6 lg:grid-cols-[1.3fr,0.7fr]">
+          <section className="space-y-6">
+            {currentConcept && (
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                <span className="text-xs text-white/40 uppercase tracking-wider">Concept {conceptIndex + 1} of {session.concepts.length}</span>
+                <h2 className="text-xl font-semibold text-white mt-1">{currentConcept.concept}</h2>
+                <div className="flex items-center gap-3 mt-3">
+                  <div className="flex gap-1">
+                    {Array.from({ length: currentConcept.difficulty }).map((_, i) => (
+                      <span key={i} className="w-2 h-2 rounded-full bg-purple-500" />
+                    ))}
+                    {Array.from({ length: Math.max(0, 5 - currentConcept.difficulty) }).map((_, i) => (
+                      <span key={i} className="w-2 h-2 rounded-full bg-white/10" />
+                    ))}
+                  </div>
+                  <span className="text-xs text-white/50">Difficulty {currentConcept.difficulty}/5</span>
                 </div>
-                {feedbackText && <p className="leading-relaxed opacity-90">{feedbackText}</p>}
               </div>
             )}
 
-            {/* Actions */}
-            {!showFeedback ? (
-              <button
-                id="submit-answer-btn"
-                onClick={handleSubmit}
-                disabled={!answer.trim() || isGrading}
-                className="w-full py-4 rounded-2xl bg-purple-600 hover:bg-purple-500 disabled:opacity-30 disabled:cursor-not-allowed text-white font-semibold transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] flex justify-center items-center gap-2"
-              >
-                {isGrading ? (
-                  <>
-                    <div className="w-5 h-5 rounded-full border-2 border-white/30 border-t-white animate-spin" />
-                    Grading...
-                  </>
-                ) : (
-                  'Submit Answer'
-                )}
-              </button>
+            {loading ? (
+              <div className="flex flex-col items-center gap-4 py-20">
+                <div className="w-10 h-10 rounded-full border-4 border-purple-500 border-t-transparent animate-spin" />
+                <p className="text-white/40">Generating question...</p>
+              </div>
             ) : (
-              <button
-                id="next-question-btn"
-                onClick={handleNext}
-                className="w-full py-4 rounded-2xl bg-purple-600 hover:bg-purple-500 text-white font-semibold transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
-              >
-                {conceptIndex + 1 < session.concepts.length ? 'Next Question →' : 'Complete Session 🎉'}
-              </button>
+              <>
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <span className="text-xs uppercase tracking-wider text-white/40">Question</span>
+                    <div className="flex items-center gap-2 text-xs text-white/60">
+                      <div className="h-2 w-24 rounded-full bg-white/10 overflow-hidden">
+                        <div
+                          className={`h-full ${timePct <= 25 ? 'bg-red-400' : 'bg-emerald-400'}`}
+                          style={{ width: `${timePct}%` }}
+                        />
+                      </div>
+                      <span>{timeLeft}s</span>
+                    </div>
+                  </div>
+                  <p className="text-white text-lg leading-relaxed">{currentQuestion}</p>
+                </div>
+
+                <div className="grid gap-3">
+                  {options.map((option, index) => {
+                    const selected = selectedOptionIndex === index;
+                    const revealCorrect = showFeedback && typeof correctIndex === 'number';
+                    const isCorrectChoice = revealCorrect && correctIndex === index;
+                    const isWrongChoice = revealCorrect && selected && correctIndex !== index;
+                    return (
+                      <button
+                        key={`${option}-${index}`}
+                        onClick={() => setSelectedOptionIndex(index)}
+                        disabled={showFeedback}
+                        className={`w-full rounded-xl border px-4 py-3 text-left transition-all ${
+                          selected
+                            ? 'border-purple-400/70 bg-purple-500/20'
+                            : 'border-white/10 bg-white/5 hover:border-white/30'
+                        } ${
+                          isCorrectChoice
+                            ? 'border-emerald-400/70 bg-emerald-500/10'
+                            : isWrongChoice
+                              ? 'border-orange-400/70 bg-orange-500/10'
+                              : ''
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="h-8 w-8 rounded-full bg-white/10 text-sm text-white/70 flex items-center justify-center">
+                            {String.fromCharCode(65 + index)}
+                          </span>
+                          <span className="text-sm text-white/80">{option}</span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <textarea
+                  id="notes-input"
+                  ref={answerRef}
+                  value={answer}
+                  onChange={(e) => setAnswer(e.target.value)}
+                  disabled={showFeedback}
+                  placeholder="Optional: jot quick notes or reasoning..."
+                  rows={3}
+                  className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder-white/30 outline-none focus:border-purple-500/60 transition-colors resize-none disabled:opacity-50"
+                />
+
+                {showFeedback && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 8, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    transition={{ type: "spring", stiffness: 400 }}
+                    className={`w-full rounded-xl border px-5 py-4 text-sm shadow-lg ${
+                       isCorrect
+                         ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300 drop-shadow-emerald-500/50'
+                         : wrongStreak >= 3
+                         ? 'border-red-500/40 bg-red-500/10 text-red-300 drop-shadow-red-500/50 animate-pulse'
+                         : 'border-orange-500/30 bg-orange-500/10 text-orange-300 drop-shadow-orange-500/50'
+                      }`}
+                    variants={{
+                      frustrated: { x: [-10, 10, -5, 5, 0], transition: { duration: 0.5 } }
+                    }}
+                    animate={wrongStreak >= 3 ? "frustrated" : false}
+                  >
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="font-semibold text-base">{isCorrect ? 'Correct!' : 'Keep trying!'}</span>
+                      <span className={`font-semibold ml-auto ${moodCfg.color}`}>Mood: {moodCfg.emoji} {moodCfg.label}</span>
+                    </div>
+                    {feedbackText && <p className="leading-relaxed opacity-90">{feedbackText}</p>}
+                  </motion.div>
+                )}
+
+                {!showFeedback ? (
+                  <button
+                    id="submit-answer-btn"
+                    onClick={handleSubmit}
+                    disabled={selectedOptionIndex === null || isGrading}
+                    className="w-full py-4 rounded-2xl bg-purple-600 hover:bg-purple-500 disabled:opacity-30 disabled:cursor-not-allowed text-white font-semibold transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] flex justify-center items-center gap-2"
+                  >
+                    {isGrading ? (
+                      <>
+                        <div className="w-5 h-5 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                        Grading...
+                      </>
+                    ) : (
+                      'Submit Answer'
+                    )}
+                  </button>
+                ) : (
+                  <button
+                    id="next-question-btn"
+                    onClick={handleNext}
+                    className="w-full py-4 rounded-2xl bg-purple-600 hover:bg-purple-500 text-white font-semibold transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
+                  >
+                    {conceptIndex + 1 < session.concepts.length ? 'Next Question' : 'Complete Session'}
+                  </button>
+                )}
+              </>
             )}
-          </>
-        )}
+          </section>
+
+          <aside className="space-y-4">
+            <motion.div
+              key={`coach-${coachPulse}`}
+              initial={{ opacity: 0, y: 20, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -10, scale: 0.95 }}
+              transition={{ duration: 0.4, type: "spring", stiffness: 400 }}
+              className="rounded-2xl border border-purple-500/30 bg-gradient-to-br from-purple-500/15 via-transparent to-transparent p-5 shadow-2xl drop-shadow-purple-500/50"
+              whileHover={{ scale: 1.02, y: -2 }}
+            >
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-sm font-semibold text-purple-200">Coach response</span>
+                <span className={`text-xs font-semibold ${moodCfg.color}`}>Mood: {moodCfg.label}</span>
+              </div>
+              <p className="text-sm text-white/80 leading-relaxed">
+                {intervention?.coachMessage || 'Stay focused and keep experimenting. Your next step is coming.'}
+              </p>
+              <div className="flex flex-wrap gap-2 mt-4">
+                <span className="rounded-full bg-white/10 px-3 py-1 text-xs text-white/70">
+                  Difficulty: {intervention?.difficultyAdjustment ?? 'same'}
+                </span>
+                <span className="rounded-full bg-white/10 px-3 py-1 text-xs text-white/70">
+                  Tone: {intervention?.tone ?? 'encouraging'}
+                </span>
+                <span className="rounded-full bg-white/10 px-3 py-1 text-xs text-white/70">
+                  Format: {intervention?.formatSwitch ?? 'text'}
+                </span>
+              </div>
+            </motion.div>
+
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+              <div className="text-xs uppercase tracking-wider text-white/40 mb-3">Live Signals</div>
+              <div className="grid grid-cols-2 gap-3 text-xs text-white/70">
+                <div className="rounded-xl bg-white/5 px-3 py-2">
+                  <div className="text-white/40">Accuracy</div>
+                  <div className="text-sm text-white">{accuracyPct}%</div>
+                </div>
+                <motion.div 
+                  className="rounded-xl bg-white/5 px-3 py-2"
+                  animate={{ scale: wrongStreak >= 3 ? [1, 1.1, 1] : 1 }}
+                  transition={{ duration: 0.3, repeat: wrongStreak >= 3 ? Infinity : 0 }}
+                >
+                  <div className="text-white/40">Wrong streak</div>
+                  <div className={`text-sm font-bold ${wrongStreak >= 3 ? 'text-red-400 drop-shadow-lg' : 'text-white'}`}>
+                    {wrongStreak}{wrongStreak >= 3 ? ' → Easier next!' : ''}
+                  </div>
+                </motion.div>
+                <div className="rounded-xl bg-white/5 px-3 py-2">
+                  <div className="text-white/40">Typing speed</div>
+                  <div className="text-sm text-white">{keystrokeSignals.typing_speed_cps} cps</div>
+                </div>
+                <div className="rounded-xl bg-white/5 px-3 py-2">
+                  <div className="text-white/40">Pauses</div>
+                  <div className="text-sm text-white">{keystrokeSignals.pause_count}</div>
+                </div>
+              </div>
+            </div>
+          </aside>
+        </div>
       </main>
 
       {showCamConsent && (

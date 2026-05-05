@@ -107,6 +107,7 @@ export interface NextQuestionRequest {
   current_mood: MoodState;
   concept_id: string;
   previous_performance?: PerformanceHistory;
+  wrong_streak?: number;
 }
 
 export interface Intervention {
@@ -119,6 +120,8 @@ export interface Intervention {
 export interface NextQuestionResponse {
   questionText: string;
   intervention: Intervention;
+  options?: string[];
+  correctIndex?: number | null;
 }
 
 export interface GradeAnswerRequest {

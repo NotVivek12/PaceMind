@@ -1,11 +1,11 @@
 from pydantic import BaseModel
-from typing import Literal, Optional, List
+from typing import Literal, Optional, List, Any
 
 
 class CurriculumRequest(BaseModel):
     topic: str
-    intent: Literal["exam_prep", "catch_up", "curiosity"]
-    level: Literal["beginner", "intermediate", "advanced"] = "intermediate"
+    intent: str
+    level: Any = "intermediate"
 
 
 class ConceptItem(BaseModel):

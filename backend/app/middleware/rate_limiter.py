@@ -1,18 +1,10 @@
-"""
-Simple in-memory token-bucket rate limiter.
-No external dependencies (no Redis).
-"""
-
 import time
 from collections import defaultdict
-from fastapi import Request, HTTPException
-from starlette.middleware.base import BaseHTTPMiddleware
+from fastapi.responses import JSONResponse
 from ..config import get_settings
 
 
 class _TokenBucket:
-    """Per-client token bucket."""
-
     def __init__(self, max_tokens: int, refill_seconds: int):
         self.max_tokens = max_tokens
         self.refill_seconds = refill_seconds
@@ -22,7 +14,7 @@ class _TokenBucket:
     def consume(self) -> bool:
         now = time.monotonic()
         elapsed = now - self.last_refill
-        # Refill proportionally
+
         self.tokens = min(
             self.max_tokens,
             self.tokens + elapsed * (self.max_tokens / self.refill_seconds),
@@ -35,33 +27,50 @@ class _TokenBucket:
         return False
 
 
-class RateLimiterMiddleware(BaseHTTPMiddleware):
+class RateLimiterMiddleware:
     """
-    Applies rate limiting to /api/ routes only.
-    Non-API routes (health, docs) are exempt.
+    Pure ASGI middleware — SAFE for CORS
     """
 
     def __init__(self, app):
-        super().__init__(app)
-        self._buckets: dict[str, _TokenBucket] = defaultdict(self._new_bucket)
+        self.app = app
+        self._buckets = defaultdict(self._new_bucket)
 
     @staticmethod
-    def _new_bucket() -> _TokenBucket:
+    def _new_bucket():
         settings = get_settings()
         return _TokenBucket(
             max_tokens=settings.rate_limit_requests,
             refill_seconds=settings.rate_limit_window_seconds,
         )
 
-    async def dispatch(self, request: Request, call_next):
-        # Only rate-limit API endpoints
-        if request.url.path.startswith("/api/"):
-            client_ip = request.client.host if request.client else "unknown"
-            bucket = self._buckets[client_ip]
-            if not bucket.consume():
-                raise HTTPException(
-                    status_code=429,
-                    detail="Rate limit exceeded. Please slow down.",
-                )
+    async def __call__(self, scope, receive, send):
+        # Only handle HTTP
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
 
-        return await call_next(request)
+        method = scope["method"]
+        path = scope["path"]
+
+        # ✅ CRITICAL: never block CORS preflight
+        if method == "OPTIONS":
+            await self.app(scope, receive, send)
+            return
+
+        # Apply rate limiting only to API routes
+        if path.startswith("/api/"):
+            client = scope.get("client")
+            client_ip = client[0] if client else "unknown"
+            bucket = self._buckets[client_ip]
+
+            if not bucket.consume():
+                response = JSONResponse(
+                    status_code=429,
+                    content={"detail": "Rate limit exceeded"},
+                )
+                await response(scope, receive, send)
+                return
+
+        # Continue request chain
+        await self.app(scope, receive, send)
