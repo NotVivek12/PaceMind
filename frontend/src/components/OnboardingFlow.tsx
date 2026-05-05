@@ -46,8 +46,8 @@ export default function OnboardingFlow({ onComplete, onBack }: Props) {
         concepts = res.concepts;
       }
       onComplete({ topic: path === 'A' ? topic : 'My Notes', concepts });
-    } catch (e: any) {
-      setError(e.message ?? 'Something went wrong');
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Something went wrong');
       setStep('topic');
     }
   }

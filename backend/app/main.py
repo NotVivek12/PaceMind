@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.responses import Response
 from .config import get_settings
-from .routers import health, curriculum, content, session, analytics, mood, questions, intervention
+from .routers import health, curriculum, content, session, analytics, mood, questions, intervention, demo
 from .middleware.logging import LoggingMiddleware
 from .middleware.rate_limiter import RateLimiterMiddleware
 from .middleware.error_handler import global_exception_handler
@@ -67,6 +67,7 @@ def create_app() -> FastAPI:
     app.include_router(content.router)
     app.include_router(session.router)
     app.include_router(analytics.router)
+    app.include_router(demo.router)
 
     app.include_router(curriculum.router, prefix="/api/curriculum")
     app.include_router(mood.router, prefix="/api")

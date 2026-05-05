@@ -1,13 +1,18 @@
 'use client';
 
+/* eslint-disable @next/next/no-img-element */
+
 import { useState, useEffect } from 'react';
 import SubjectPicker from '@/components/SubjectPicker';
 import SessionView from '@/components/SessionView';
+import TeacherDashboard from '@/components/TeacherDashboard';
+import { getDemoSession, startLearningSession } from '@/lib/api';
 import type { Concept, StudentLevel } from '@/types';
 
-export type AppScreen = 'home' | 'onboarding' | 'session';
+export type AppScreen = 'home' | 'onboarding' | 'session' | 'dashboard';
 
 export interface SessionData {
+  sessionId?: string;
   topic: string;
   concepts: Concept[];
   level?: StudentLevel;
@@ -16,6 +21,7 @@ export interface SessionData {
 export default function HomePage() {
   const [screen, setScreen] = useState<AppScreen>('home');
   const [session, setSession] = useState<SessionData | null>(null);
+  const [completedSessionId, setCompletedSessionId] = useState<string | null>(null);
 
   useEffect(() => {
     if (screen !== 'home') return;
@@ -41,9 +47,24 @@ export default function HomePage() {
     return () => observer.disconnect();
   }, [screen]);
 
-  function startSession(data: SessionData) {
-    setSession(data);
+  async function startSession(data: SessionData) {
+    try {
+      const res = await startLearningSession({ topic: data.topic, concepts: data.concepts });
+      setSession({ ...data, sessionId: res.session_id });
+    } catch {
+      setSession(data);
+    }
     setScreen('session');
+  }
+
+  async function openSeededDemo() {
+    try {
+      const res = await getDemoSession();
+      setCompletedSessionId(res.session_id);
+    } catch {
+      setCompletedSessionId('demo-rich-session');
+    }
+    setScreen('dashboard');
   }
 
   if (screen === 'onboarding') {
@@ -59,7 +80,27 @@ export default function HomePage() {
     return (
       <SessionView
         session={session}
-        onEnd={() => { setSession(null); setScreen('home'); }}
+        onEnd={(sessionId) => {
+          setSession(null);
+          if (sessionId) {
+            setCompletedSessionId(sessionId);
+            setScreen('dashboard');
+          } else {
+            setScreen('home');
+          }
+        }}
+      />
+    );
+  }
+
+  if (screen === 'dashboard' && completedSessionId) {
+    return (
+      <TeacherDashboard
+        sessionId={completedSessionId}
+        onBackHome={() => {
+          setCompletedSessionId(null);
+          setScreen('home');
+        }}
       />
     );
   }
@@ -67,7 +108,7 @@ export default function HomePage() {
   return (
     <main className="w-full">
       {/* Fullscreen Hero Section with Video Background */}
-      <section className="relative min-h-screen flex flex-col items-center justify-center px-6 pt-32 pb-20 overflow-hidden">
+      <section className="relative min-h-screen flex flex-col items-center justify-center px-6 pt-48 pb-20 overflow-hidden">
         {/* GSAP Video Placeholder Background */}
         <div className="absolute inset-0 -z-10 flex items-center justify-center bg-black">
           {/* Video will go here. For now, a placeholder overlay */}
@@ -102,6 +143,13 @@ export default function HomePage() {
             className="mt-8 px-8 py-4 rounded-2xl bg-purple-600 hover:bg-purple-500 text-white font-semibold text-lg transition-all duration-200 hover:scale-105 active:scale-95 shadow-lg shadow-purple-500/25"
           >
             Get Started →
+          </button>
+          <button
+            id="seeded-demo-btn"
+            onClick={openSeededDemo}
+            className="ml-0 mt-3 rounded-2xl border border-white/15 bg-white/5 px-6 py-4 text-lg font-semibold text-white/80 transition-all duration-200 hover:bg-white/10 hover:text-white sm:ml-3"
+          >
+            Open demo data
           </button>
         </div>
       </section>
@@ -211,7 +259,7 @@ export default function HomePage() {
                   <span className="text-xl">✨</span> Why is this useful to you?
                 </h3>
                 <p className="text-white/60 text-sm leading-relaxed">
-                  Instead of waiting for you to fail a quiz, PaceMind notices the exact moment you lose focus or struggle with a concept. It instantly adapts by slowing down, switching explanations, or providing a breather. If you're highly engaged, it accelerates the curriculum to keep you challenged.
+                  Instead of waiting for you to fail a quiz, PaceMind notices the exact moment you lose focus or struggle with a concept. It instantly adapts by slowing down, switching explanations, or providing a breather. If you are highly engaged, it accelerates the curriculum to keep you challenged.
                 </p>
               </div>
             </div>

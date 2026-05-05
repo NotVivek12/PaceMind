@@ -1,14 +1,32 @@
 'use client';
 
+/* eslint-disable react-hooks/immutability, react-hooks/set-state-in-effect, react-hooks/exhaustive-deps */
+
 import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { evaluateMoodSignals, evaluateSession, getNextQuestion, gradeAnswer, getIntervention } from '@/lib/api';
+import {
+  endLearningSession,
+  evaluateMoodSignals,
+  evaluateSession,
+  getNextQuestion,
+  gradeAnswer,
+  getIntervention,
+  submitSessionActivity,
+} from '@/lib/api';
 import type { SessionData } from '@/app/page';
 import type { MoodState, Concept, Intervention, FaceExpressionScores, KeystrokeSignals } from '@/types';
 
+type FaceExpressionResult = {
+  expressions?: Partial<FaceExpressionScores>;
+};
+
+type FaceDetectionTask = Promise<FaceExpressionResult | undefined> & {
+  withFaceExpressions?: () => Promise<FaceExpressionResult | undefined>;
+};
+
 interface Props {
   session: SessionData;
-  onEnd: () => void;
+  onEnd: (sessionId?: string) => void;
 }
 
 const MOOD_CONFIG: Record<MoodState, { emoji: string; label: string; color: string }> = {
@@ -59,14 +77,14 @@ export default function SessionView({ session, onEnd }: Props) {
   const [expressionMood, setExpressionMood] = useState<MoodState | null>(null);
   const [cameraState, setCameraState] = useState<'off' | 'requesting' | 'active' | 'denied' | 'error'>('off');
   const [showCamConsent, setShowCamConsent] = useState(false);
-  const startTimeRef = useRef(Date.now());
+  const startTimeRef = useRef(0);
   const pauseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const keystrokeRef = useRef({
     charCount: 0,
     backspaceCount: 0,
     pauseCount: 0,
     inputEvents: 0,
-    startMs: Date.now(),
+    startMs: 0,
   });
   const lastLogRef = useRef(0);
   const isPostingMoodRef = useRef(false);
@@ -147,15 +165,60 @@ export default function SessionView({ session, onEnd }: Props) {
     return base;
   }
 
+  async function logSessionActivity(eventType: string, data: Record<string, unknown>) {
+    if (!session.sessionId) return;
+    try {
+      await submitSessionActivity(session.sessionId, {
+        event_type: eventType,
+        data,
+      });
+    } catch {
+      // Analytics should never block the student loop.
+    }
+  }
+
+  async function finishSession() {
+    setTimerActive(false);
+    if (!session.sessionId) {
+      onEnd();
+      return;
+    }
+    try {
+      await endLearningSession(session.sessionId);
+    } catch {
+      // Still show the dashboard; it can render whatever events were captured.
+    }
+    onEnd(session.sessionId);
+  }
+
+  const [modelsLoaded, setModelsLoaded] = useState({ detector: false, expressions: false });
+
   async function loadFaceModels() {
-    if (faceApiRef.current) return faceApiRef.current;
+    if (faceApiRef.current && modelsLoaded.detector) {
+      return {
+        faceapi: faceApiRef.current,
+        detectorOk: modelsLoaded.detector,
+        expressionsOk: modelsLoaded.expressions,
+      };
+    }
+    
     const faceapi = await import('face-api.js');
-    await Promise.all([
-      faceapi.nets.tinyFaceDetector.loadFromUri('/face-models'),
-      faceapi.nets.faceExpressionNet.loadFromUri('/face-models'),
-    ]);
     faceApiRef.current = faceapi;
-    return faceapi;
+
+    const loadModel = async (net: { loadFromUri: (uri: string) => Promise<void> }) => {
+      try {
+        await net.loadFromUri('/face-models');
+        return true;
+      } catch {
+        return false;
+      }
+    };
+
+    const detectorOk = await loadModel(faceapi.nets.tinyFaceDetector);
+    const expressionsOk = await loadModel(faceapi.nets.faceExpressionNet);
+
+    setModelsLoaded({ detector: detectorOk, expressions: expressionsOk });
+    return { faceapi, detectorOk, expressionsOk };
   }
 
   function stopCamera() {
@@ -185,26 +248,36 @@ export default function SessionView({ session, onEnd }: Props) {
         await videoRef.current.play();
       }
 
-      const faceapi = await loadFaceModels();
+      const { faceapi, expressionsOk } = await loadFaceModels();
       if (detectTimerRef.current) clearInterval(detectTimerRef.current);
       detectTimerRef.current = setInterval(async () => {
         if (!videoRef.current) return;
         try {
-          const result = await faceapi
-            .detectSingleFace(videoRef.current, new faceapi.TinyFaceDetectorOptions())
-            .withFaceExpressions();
-          if (result?.expressions) {
-            const scores: FaceExpressionScores = {
-              neutral: result.expressions.neutral ?? 0,
-              happy: result.expressions.happy ?? 0,
-              sad: result.expressions.sad ?? 0,
-              angry: result.expressions.angry ?? 0,
-              fearful: result.expressions.fearful ?? 0,
-              disgusted: result.expressions.disgusted ?? 0,
-              surprised: result.expressions.surprised ?? 0,
-            };
-            setExpressionScores(scores);
-            setExpressionMood(mapExpressionsToMood(scores));
+          let task = faceapi.detectSingleFace(
+            videoRef.current,
+            new faceapi.TinyFaceDetectorOptions(),
+          ) as unknown as FaceDetectionTask;
+          
+          if (expressionsOk && task.withFaceExpressions) {
+            task = task.withFaceExpressions() as unknown as FaceDetectionTask;
+          }
+
+          const result = await task;
+          
+          if (result) {
+            if (result.expressions) {
+              const scores: FaceExpressionScores = {
+                neutral: result.expressions.neutral ?? 0,
+                happy: result.expressions.happy ?? 0,
+                sad: result.expressions.sad ?? 0,
+                angry: result.expressions.angry ?? 0,
+                fearful: result.expressions.fearful ?? 0,
+                disgusted: result.expressions.disgusted ?? 0,
+                surprised: result.expressions.surprised ?? 0,
+              };
+              setExpressionScores(scores);
+              setExpressionMood(mapExpressionsToMood(scores));
+            }
           }
         } catch {
           // Keep last successful expression if a frame fails
@@ -213,7 +286,6 @@ export default function SessionView({ session, onEnd }: Props) {
 
       setCameraState('active');
     } catch (err) {
-      console.error('Webcam init failed', err);
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((track) => track.stop());
         streamRef.current = null;
@@ -229,7 +301,6 @@ export default function SessionView({ session, onEnd }: Props) {
   // Load first question on mount
   useEffect(() => {
     loadNextQuestion();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -262,10 +333,6 @@ export default function SessionView({ session, onEnd }: Props) {
       setKeystrokeSignals(next);
 
       if (next.input_events > 0 && Date.now() - lastLogRef.current > 2000) {
-        const errorRate = next.backspace_count / Math.max(1, next.input_events);
-        console.log(
-          `[keystrokes] speed=${next.typing_speed_cps} cps, errorRate=${(errorRate * 100).toFixed(1)}%`,
-        );
         lastLogRef.current = Date.now();
       }
     }, 1000);
@@ -284,7 +351,6 @@ export default function SessionView({ session, onEnd }: Props) {
 
   useEffect(() => {
     if (mood !== lastMoodRef.current) {
-      const prevMood = lastMoodRef.current;
       lastMoodRef.current = mood;
       setCoachPulse((value) => value + 1);
 
@@ -301,7 +367,9 @@ export default function SessionView({ session, onEnd }: Props) {
             setIntervention({
               coachMessage: res.coachMessage || res.message,
               difficultyAdjustment: res.difficultyAdjustment,
-              formatSwitch: res.formatSwitch as any,
+              formatSwitch: res.formatSwitch === 'visual' || res.formatSwitch === 'interactive' || res.formatSwitch === 'none'
+                ? res.formatSwitch
+                : 'text',
               tone: res.tone,
             });
           })
@@ -367,6 +435,21 @@ export default function SessionView({ session, onEnd }: Props) {
     setShowFeedback(true);
     setTotal((value) => value + 1);
     setWrongStreak((value) => value + 1);
+    logSessionActivity('answer_timeout', {
+      concept_id: currentConcept?.id ?? 'unknown',
+      concept: currentConcept?.concept ?? 'Unknown concept',
+      question_text: currentQuestion,
+      answer_text: '',
+      is_correct: false,
+      response_time_ms: Date.now() - startTimeRef.current,
+      keystroke_speed: keystrokeSignals.typing_speed_cps,
+      backspace_count: keystrokeSignals.backspace_count,
+      pause_count: keystrokeSignals.pause_count,
+      answer_length: 0,
+      edit_ratio: 0,
+      time_to_first_keystroke_ms: keystrokeSignals.elapsed_ms,
+      mood,
+    });
   }
 
   async function loadNextQuestion() {
@@ -399,7 +482,7 @@ export default function SessionView({ session, onEnd }: Props) {
       setSelectedOptionIndex(null);
       setTimeLeft(30);
       setTimerActive(true);
-    } catch (e) {
+    } catch {
       setCurrentQuestion('Describe the key characteristics of this concept.');
       setIntervention(null);
       setOptions(normalizeOptions());
@@ -460,6 +543,7 @@ export default function SessionView({ session, onEnd }: Props) {
       }
 
       // Infer mood
+      let inferredMood = mood;
       try {
         const evalRes = await evaluateSession({
           answer_correct: answeredCorrectly,
@@ -468,12 +552,31 @@ export default function SessionView({ session, onEnd }: Props) {
           backspace_count: signals.backspace_count,
           pause_count: signals.pause_count,
         });
+        inferredMood = overrideMood ?? evalRes.mood;
         if (!overrideMood) setMood(evalRes.mood);
-      } catch (e) {
+      } catch {
         // Keep current mood on error
       }
-    } catch (e) {
-      console.error('Failed to grade answer:', e);
+
+      await logSessionActivity('answer_submission', {
+        concept_id: currentConcept?.id ?? 'unknown',
+        concept: currentConcept?.concept ?? 'Unknown concept',
+        question_text: currentQuestion,
+        answer_text: selectedText,
+        selected_option_index: selectedOptionIndex,
+        correct_index: correctIndex,
+        is_correct: answeredCorrectly,
+        response_time_ms: responseTimeMs,
+        keystroke_speed: keystrokeSpeed,
+        backspace_count: signals.backspace_count,
+        pause_count: signals.pause_count,
+        answer_length: selectedText.length + answer.length,
+        edit_ratio: signals.backspace_count / Math.max(1, signals.input_events),
+        time_to_first_keystroke_ms: signals.elapsed_ms,
+        mood: inferredMood,
+        mood_confidence: expressionScores ? 0.85 : 0.72,
+      });
+    } catch {
       setFeedbackText('Failed to evaluate answer. Please try again.');
       setShowFeedback(true);
       setIsCorrect(false);
@@ -489,7 +592,7 @@ export default function SessionView({ session, onEnd }: Props) {
     if (shouldAdvanceConcept) {
       const nextIndex = conceptIndex + 1;
       if (nextIndex >= session.concepts.length) {
-        onEnd();
+        finishSession();
         return;
       }
       setConceptIndex(nextIndex);
@@ -501,7 +604,7 @@ export default function SessionView({ session, onEnd }: Props) {
     // Load next question for current or next concept
     const targetIndex = shouldAdvanceConcept ? conceptIndex + 1 : conceptIndex;
     const targetConcept = session.concepts[targetIndex];
-    if (!targetConcept) { onEnd(); return; }
+    if (!targetConcept) { finishSession(); return; }
 
     setLoading(true);
     setAnswer('');
@@ -531,7 +634,7 @@ export default function SessionView({ session, onEnd }: Props) {
       setSelectedOptionIndex(null);
       setTimeLeft(30);
       setTimerActive(true);
-    } catch (e) {
+    } catch {
       setCurrentQuestion('Describe the key characteristics of this concept.');
       setIntervention(null);
       setOptions(normalizeOptions());
@@ -548,11 +651,16 @@ export default function SessionView({ session, onEnd }: Props) {
   const progress = ((conceptIndex) / session.concepts.length) * 100;
   const timePct = Math.max(0, Math.min(100, (timeLeft / 30) * 100));
   const accuracyPct = total > 0 ? Math.round((correct / total) * 100) : 0;
+  const expressionEntries = expressionScores
+    ? (Object.entries(expressionScores) as [keyof FaceExpressionScores, number][])
+        .sort((a, b) => b[1] - a[1])
+    : [];
+  const topExpression = expressionEntries[0];
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col pt-20">
       {/* Header */}
-      <header className="sticky top-0 z-10 border-b border-white/10 bg-[#0a0a0f]/80 backdrop-blur px-6 py-3 flex items-center justify-between">
+      <header className="sticky top-20 z-10 border-b border-white/10 bg-[#0a0a0f]/80 backdrop-blur px-6 py-3 flex items-center justify-between">
         <div>
           <span className="text-sm text-white/40">Studying: </span>
           <span className="text-sm font-medium text-white">{session.topic}</span>
@@ -578,7 +686,7 @@ export default function SessionView({ session, onEnd }: Props) {
             {overrideMood && <span className="text-xs text-white/40">Manual</span>}
           </motion.div>
 
-          {/* Webcam badge */}
+          {/* Webcam status */}
           <div className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/60">
             <span
               className={`h-2 w-2 rounded-full ${
@@ -593,14 +701,6 @@ export default function SessionView({ session, onEnd }: Props) {
                         : 'bg-white/20'
               }`}
             />
-            <div className="h-5 w-8 overflow-hidden rounded bg-black/30">
-              <video
-                ref={videoRef}
-                muted
-                playsInline
-                className={`h-full w-full object-cover ${cameraState === 'active' ? 'opacity-100' : 'opacity-40'}`}
-              />
-            </div>
             <span>
               Webcam {cameraState === 'active' ? 'On' : cameraState === 'requesting' ? 'Starting' : cameraState === 'error' ? 'Error' : 'Off'}
             </span>
@@ -642,7 +742,7 @@ export default function SessionView({ session, onEnd }: Props) {
           <span className="text-sm text-white/40">{correct}/{total} correct</span>
           <button
             id="end-session-btn"
-            onClick={onEnd}
+            onClick={finishSession}
             className="text-sm text-white/30 hover:text-white/70 transition-colors"
           >
             End Session
@@ -890,6 +990,102 @@ export default function SessionView({ session, onEnd }: Props) {
                 </span>
               </div>
             </motion.div>
+
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-xs uppercase tracking-wider text-white/40">Facecam</div>
+                  <div className="mt-1 text-sm font-semibold text-white">
+                    {cameraState === 'active'
+                      ? expressionMood
+                        ? `${expressionMood} signal`
+                        : 'Reading face signal'
+                      : cameraState === 'requesting'
+                        ? 'Starting camera'
+                        : cameraState === 'denied'
+                          ? 'Camera blocked'
+                          : cameraState === 'error'
+                            ? 'Camera error'
+                            : 'Camera off'}
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    if (cameraState === 'active') {
+                      stopCamera();
+                    } else {
+                      setShowCamConsent(true);
+                    }
+                  }}
+                  className="rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-xs font-medium text-white/75 hover:bg-white/20"
+                >
+                  {cameraState === 'active' ? 'Stop' : 'Enable'}
+                </button>
+              </div>
+
+              <div className="relative aspect-video overflow-hidden rounded-xl border border-white/10 bg-black/40">
+                <video
+                  ref={videoRef}
+                  muted
+                  playsInline
+                  width={640}
+                  height={480}
+                  className={`h-full w-full object-cover transition-opacity duration-500 ${
+                    cameraState === 'active' ? 'opacity-100' : 'opacity-30'
+                  }`}
+                />
+                <div className="absolute left-3 top-3 flex items-center gap-2 rounded-full bg-black/60 px-3 py-1 text-xs text-white/75 backdrop-blur">
+                  <span
+                    className={`h-2 w-2 rounded-full ${
+                      cameraState === 'active'
+                        ? 'bg-emerald-400'
+                        : cameraState === 'requesting'
+                          ? 'bg-yellow-400'
+                          : cameraState === 'denied' || cameraState === 'error'
+                            ? 'bg-red-400'
+                            : 'bg-white/30'
+                    }`}
+                  />
+                  {cameraState === 'active' ? 'Live' : cameraState === 'requesting' ? 'Starting' : 'Offline'}
+                </div>
+                {topExpression && (
+                  <div className="absolute bottom-3 left-3 rounded-full bg-black/60 px-3 py-1 text-xs font-medium text-white/85 backdrop-blur">
+                    {topExpression[0]} {(topExpression[1] * 100).toFixed(0)}%
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-4 rounded-xl bg-black/20 p-3">
+                <div className="mb-3 flex items-center justify-between">
+                  <span className="text-xs uppercase tracking-wider text-white/40">Realtime Facial Logs</span>
+                  <span className={`text-xs font-medium ${moodCfg.color}`}>
+                    {expressionMood ?? 'Waiting'}
+                  </span>
+                </div>
+                {expressionEntries.length > 0 ? (
+                  <div className="space-y-2">
+                    {expressionEntries.map(([name, value]) => (
+                      <div key={name} className="grid grid-cols-[72px,1fr,42px] items-center gap-2 text-xs">
+                        <span className="capitalize text-white/60">{name}</span>
+                        <div className="h-2 overflow-hidden rounded-full bg-white/10">
+                          <motion.div
+                            className="h-full rounded-full bg-emerald-400"
+                            initial={false}
+                            animate={{ width: `${Math.round(value * 100)}%` }}
+                            transition={{ duration: 0.25 }}
+                          />
+                        </div>
+                        <span className="text-right font-mono text-white/70">{(value * 100).toFixed(0)}%</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-dashed border-white/10 px-3 py-4 text-center text-xs text-white/45">
+                    Enable the webcam to stream expression scores here.
+                  </div>
+                )}
+              </div>
+            </div>
 
             <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
               <div className="text-xs uppercase tracking-wider text-white/40 mb-3">Live Signals</div>

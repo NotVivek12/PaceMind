@@ -1,15 +1,16 @@
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
-from ..models.session import LearningSession, ActivityEvent, AnswerSubmission
+from ..models.session import LearningSession, ActivityEvent, AnswerSubmission, Concept
 from ..models.mood import MoodSnapshot
 from ..store.memory_store import store
 from .mood_engine import infer_mood
 
-def create_session(topic: str) -> LearningSession:
+def create_session(topic: str, concepts: list[Concept] | None = None) -> LearningSession:
     session = LearningSession(
         session_id=str(uuid.uuid4()),
         topic=topic,
+        concepts=concepts or [],
         started_at=datetime.now(timezone.utc)
     )
     store.save_session(session)

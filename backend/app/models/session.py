@@ -26,6 +26,38 @@ class Concept(BaseModel):
     prerequisites: List[str] = []
     difficulty: int = 1
 
+class ConceptMastery(BaseModel):
+    concept_id: str
+    concept: str
+    correct: int = 0
+    total: int = 0
+    accuracy: float = 0
+    status: Literal["green", "amber", "red"] = "red"
+
+class MoodTimelinePoint(BaseModel):
+    timestamp: datetime
+    mood: MoodState
+    confidence: float = 0.7
+    concept: Optional[str] = None
+
+class StudentSessionSummary(BaseModel):
+    student_id: str = "demo-student"
+    student_name: str = "Demo Student"
+    session_id: str
+    topic: str
+    status: str
+    started_at: datetime
+    ended_at: Optional[datetime] = None
+    total_events: int
+    answers_total: int
+    answers_correct: int
+    accuracy: float
+    mood_counts: Dict[str, int]
+    dominant_mood: MoodState
+    mood_timeline: List[MoodTimelinePoint]
+    concept_mastery: List[ConceptMastery]
+    llm_summary: Optional[str] = None
+
 class AnswerSubmission(BaseModel):
     question_text: str
     answer_text: str
@@ -53,9 +85,11 @@ class LearningSession(BaseModel):
     ended_at: Optional[datetime] = None
     events: List[ActivityEvent] = []
     mood_history: List[MoodSnapshot] = []
+    llm_summary: Optional[str] = None
 
 class SessionStartRequest(BaseModel):
     topic: str
+    concepts: List[Concept] = []
 
 class SessionStartResponse(BaseModel):
     session_id: str
@@ -71,6 +105,8 @@ class SessionAnalyticsResponse(BaseModel):
     status: str
     total_events: int
     mood_timeline: List[MoodSnapshot]
+    class_overview: List[StudentSessionSummary] = []
+    student_summary: Optional[StudentSessionSummary] = None
 
 class GradeAnswerRequest(BaseModel):
     question_text: str
@@ -79,4 +115,3 @@ class GradeAnswerRequest(BaseModel):
 class GradeAnswerResponse(BaseModel):
     is_correct: bool
     feedback: str
-

@@ -1,10 +1,7 @@
 import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
 import NavBar from '@/components/NavBar';
 import './globals.css';
 import ErrorBoundary from '@/components/ErrorBoundary';
-
-const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
 
 export const metadata: Metadata = {
   title: 'PaceMind — Adaptive AI Learning',
@@ -23,7 +20,7 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={`${inter.variable} h-full`} suppressHydrationWarning>
+    <html lang="en" className="h-full" suppressHydrationWarning>
       <body className="min-h-full bg-[#0a0a0f] text-white antialiased">
         <NavBar />
         <ErrorBoundary>{children}</ErrorBoundary>

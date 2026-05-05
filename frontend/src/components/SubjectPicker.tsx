@@ -124,9 +124,9 @@ export default function SubjectPicker({ onComplete, onBack }: Props) {
       const res = await generateCurriculum({ topic, intent, level });
       if (abortRef.current) return;
       onComplete({ topic, concepts: res.concepts, level });
-    } catch (e: any) {
+    } catch (e: unknown) {
       if (abortRef.current) return;
-      setError(e.message ?? 'Something went wrong generating your curriculum.');
+      setError(e instanceof Error ? e.message : 'Something went wrong generating your curriculum.');
       setStep('diagnostic');
     }
   }, [onComplete]);
@@ -148,9 +148,9 @@ export default function SubjectPicker({ onComplete, onBack }: Props) {
       }
       if (abortRef.current) return;
       onComplete({ topic: file?.name ?? 'My Notes', concepts, level: 'intermediate' });
-    } catch (e: any) {
+    } catch (e: unknown) {
       if (abortRef.current) return;
-      setError(e.message ?? 'Something went wrong extracting concepts.');
+      setError(e instanceof Error ? e.message : 'Something went wrong extracting concepts.');
       setStep('upload');
     }
   }
@@ -183,7 +183,7 @@ export default function SubjectPicker({ onComplete, onBack }: Props) {
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center px-6 py-12">
+    <div className="min-h-screen flex flex-col items-center px-6 pt-28 pb-12">
       {/* Back button */}
       <button
         onClick={goBack}
@@ -323,7 +323,7 @@ export default function SubjectPicker({ onComplete, onBack }: Props) {
       {/* ─── Step: Intent Selector ─────────────────────────────────────────── */}
       {step === 'intent' && (
         <div className="w-full max-w-lg flex flex-col items-center">
-          <h1 className="text-3xl font-bold mb-2 text-center">What's your goal?</h1>
+          <h1 className="text-3xl font-bold mb-2 text-center">What is your goal?</h1>
           <p className="text-white/50 mb-8 text-center">
             Studying <span className="text-purple-400 font-medium">{selectedTopic || customTopic}</span>
           </p>

@@ -6,7 +6,8 @@ from ..models.session import (
     SessionStartResponse, SessionActivityRequest, ActivityEvent, AnswerSubmission,
     GradeAnswerRequest, GradeAnswerResponse
 )
-from ..services.ai_service import generate_next_question, grade_answer
+from ..services.ai_service import generate_next_question, grade_answer, generate_session_summary
+from ..services.analytics_service import build_student_summary
 from ..services.session_manager import create_session, get_session, add_activity_event, end_session
 from ..services.mood_engine import infer_mood
 
@@ -51,7 +52,7 @@ async def session_next_question(req: NextQuestionRequest):
 # --- New Session-Aware Endpoints ---
 @router.post("/start", response_model=SessionStartResponse)
 def start_session(req: SessionStartRequest):
-    session = create_session(req.topic)
+    session = create_session(req.topic, req.concepts)
     return SessionStartResponse(session_id=session.session_id, topic=session.topic)
 
 @router.get("/{session_id}")
@@ -75,11 +76,19 @@ def submit_activity(req: SessionActivityRequest, session_id: str = Path(...)):
     return {"status": "event_added"}
 
 @router.post("/{session_id}/end")
-def terminate_session(session_id: str = Path(...)):
+async def terminate_session(session_id: str = Path(...)):
     session = end_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
-    return {"status": "ended"}
+    summary = build_student_summary(session)
+    session.llm_summary = await generate_session_summary(
+        topic=session.topic,
+        answers_correct=summary.answers_correct,
+        answers_total=summary.answers_total,
+        concept_mastery=[item.model_dump() for item in summary.concept_mastery],
+        mood_counts=summary.mood_counts,
+    )
+    return {"status": "ended", "summary": session.llm_summary}
 
 @router.post("/grade", response_model=GradeAnswerResponse)
 async def session_grade_answer(req: GradeAnswerRequest):

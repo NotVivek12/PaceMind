@@ -133,3 +133,69 @@ export interface GradeAnswerResponse {
   is_correct: boolean;
   feedback: string;
 }
+
+export interface SessionStartRequest {
+  topic: string;
+  concepts: Concept[];
+}
+
+export interface SessionStartResponse {
+  session_id: string;
+  topic: string;
+}
+
+export interface SessionActivityRequest {
+  event_type: 'answer_submission' | 'answer_timeout' | 'mood_signal' | string;
+  data: Record<string, unknown>;
+}
+
+export type MasteryStatus = 'green' | 'amber' | 'red';
+
+export interface ConceptMastery {
+  concept_id: string;
+  concept: string;
+  correct: number;
+  total: number;
+  accuracy: number;
+  status: MasteryStatus;
+}
+
+export interface MoodTimelinePoint {
+  timestamp: string;
+  mood: MoodState;
+  confidence: number;
+  concept?: string | null;
+}
+
+export interface StudentSessionSummary {
+  student_id: string;
+  student_name: string;
+  session_id: string;
+  topic: string;
+  status: string;
+  started_at: string;
+  ended_at?: string | null;
+  total_events: number;
+  answers_total: number;
+  answers_correct: number;
+  accuracy: number;
+  mood_counts: Partial<Record<MoodState, number>>;
+  dominant_mood: MoodState;
+  mood_timeline: MoodTimelinePoint[];
+  concept_mastery: ConceptMastery[];
+  llm_summary?: string | null;
+}
+
+export interface SessionAnalyticsResponse {
+  session_id: string;
+  topic: string;
+  status: string;
+  total_events: number;
+  class_overview: StudentSessionSummary[];
+  student_summary?: StudentSessionSummary | null;
+}
+
+export interface EndSessionResponse {
+  status: string;
+  summary?: string | null;
+}

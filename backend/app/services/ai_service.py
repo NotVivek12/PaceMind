@@ -202,6 +202,129 @@ async def call_llm(prompt: str) -> str:
 _curriculum_cache: dict[str, list[dict]] = {}
 
 
+def _humanize_topic(topic: str) -> str:
+    text = (topic or "General concept").replace("-", " ").replace("_", " ").strip()
+    return text[:1].upper() + text[1:] if text else "General concept"
+
+
+def _fallback_difficulty_adjustment(current_mood: str, accuracy: float, wrong_streak: int) -> str:
+    mood = (current_mood or "").strip().lower()
+    if wrong_streak >= 3 or mood in {"frustrated", "confused", "disengaged"}:
+        return "easier"
+    if accuracy >= 0.8 and wrong_streak == 0 and mood == "flow":
+        return "harder"
+    return "same"
+
+
+def _fallback_intervention(topic: str, current_mood: str, history_correct: int, history_total: int, wrong_streak: int) -> dict:
+    accuracy = (history_correct / history_total) if history_total else 0.0
+    mood = (current_mood or "Flow").strip().lower()
+    difficulty = _fallback_difficulty_adjustment(current_mood, accuracy, wrong_streak)
+
+    if mood == "frustrated":
+        coach_message = f"Take a reset on {_humanize_topic(topic)}. We'll slow it down and rebuild confidence."
+        tone = "supportive"
+        format_switch = "text"
+    elif mood == "confused":
+        coach_message = f"Let's simplify {_humanize_topic(topic)} and reconnect the main idea before the next question."
+        tone = "patient"
+        format_switch = "visual"
+    elif mood == "disengaged":
+        coach_message = f"Quick reset: here's a sharper angle on {_humanize_topic(topic)} to pull you back in."
+        tone = "curious"
+        format_switch = "interactive"
+    elif mood == "flow":
+        coach_message = f"You're in flow on {_humanize_topic(topic)}. Let's keep the pace up with a stronger question."
+        tone = "encouraging"
+        format_switch = "interactive"
+    else:
+        coach_message = f"You're doing fine on {_humanize_topic(topic)}. Let's keep moving."
+        tone = "encouraging"
+        format_switch = "text"
+
+    if wrong_streak >= 3:
+        coach_message = f"Three misses in a row on {_humanize_topic(topic)}. We'll step back and make the next one easier."
+        tone = "reassuring"
+        format_switch = "text"
+    elif history_total >= 3 and accuracy >= 0.8:
+        coach_message = f"Strong run on {_humanize_topic(topic)}. Time to raise the challenge a bit."
+        tone = "motivating"
+        format_switch = "interactive"
+
+    return {
+        "coachMessage": coach_message,
+        "difficultyAdjustment": difficulty,
+        "formatSwitch": format_switch,
+        "tone": tone,
+    }
+
+
+def _fallback_question(topic: str, current_mood: str, history_correct: int, history_total: int, wrong_streak: int) -> dict:
+    intervention = _fallback_intervention(topic, current_mood, history_correct, history_total, wrong_streak)
+    topic_label = _humanize_topic(topic)
+
+    if intervention["difficultyAdjustment"] == "easier":
+        question_text = f"Which statement best defines {topic_label}?"
+        options = [
+            f"{topic_label} is the main idea or rule being studied.",
+            f"{topic_label} is only a rare exception that appears once in a while.",
+            f"{topic_label} is unrelated to the lesson and can be ignored.",
+            f"{topic_label} means the opposite of the lesson's core idea.",
+        ]
+    elif intervention["difficultyAdjustment"] == "harder":
+        question_text = f"Which statement best explains how {topic_label} works in practice?"
+        options = [
+            f"{topic_label} works by combining the main rule with the surrounding context.",
+            f"{topic_label} works only when no other factors are involved.",
+            f"{topic_label} works by replacing the main rule with an unrelated one.",
+            f"{topic_label} works by removing the key idea entirely.",
+        ]
+    else:
+        question_text = f"Which of the following best summarizes the key mechanism of {topic_label}?"
+        options = [
+            f"{topic_label} centers on the core rule or process that drives the topic.",
+            f"{topic_label} is mostly about a small side detail, not the main idea.",
+            f"{topic_label} is a historical note that no longer matters.",
+            f"{topic_label} contradicts the main idea of the lesson.",
+        ]
+
+    return {
+        "questionText": question_text,
+        "options": options,
+        "correctIndex": 0,
+        "intervention": intervention,
+    }
+
+
+def _fallback_grade_answer(question: str, answer: str) -> dict:
+    cleaned = answer.strip()
+    if not cleaned:
+        return {
+            "is_correct": False,
+            "feedback": "I could not verify that answer just now. Try one of the visible options and continue.",
+        }
+
+    return {
+        "is_correct": True,
+        "feedback": "Your answer was recorded. The tutor is temporarily unavailable, so we will keep the session moving.",
+    }
+
+
+def _fallback_curriculum(topic: str) -> list[dict]:
+    topic_label = _humanize_topic(topic)
+    concepts = [
+        {"id": "intro", "concept": f"Introduction to {topic_label}", "prerequisites": [], "difficulty": 1, "questionTypes": ["mcq"], "estimatedMinutes": 5},
+        {"id": "basics", "concept": f"Basic Principles of {topic_label}", "prerequisites": ["intro"], "difficulty": 2, "questionTypes": ["mcq"], "estimatedMinutes": 10},
+        {"id": "core-v1", "concept": f"Core Mechanics (Part 1)", "prerequisites": ["basics"], "difficulty": 2, "questionTypes": ["mcq", "short-answer"], "estimatedMinutes": 12},
+        {"id": "core-v2", "concept": f"Core Mechanics (Part 2)", "prerequisites": ["core-v1"], "difficulty": 3, "questionTypes": ["mcq"], "estimatedMinutes": 12},
+        {"id": "common-patterns", "concept": "Common Patterns & Use Cases", "prerequisites": ["core-v2"], "difficulty": 3, "questionTypes": ["mcq"], "estimatedMinutes": 15},
+        {"id": "troubleshooting", "concept": "Troubleshooting & Edge Cases", "prerequisites": ["common-patterns"], "difficulty": 4, "questionTypes": ["explain"], "estimatedMinutes": 15},
+        {"id": "optimization", "concept": "Optimization & Best Practices", "prerequisites": ["troubleshooting"], "difficulty": 4, "questionTypes": ["mcq"], "estimatedMinutes": 10},
+        {"id": "advanced-topics", "concept": f"Future of {topic_label}", "prerequisites": ["optimization"], "difficulty": 5, "questionTypes": ["short-answer"], "estimatedMinutes": 20},
+    ]
+    return concepts
+
+
 async def generate_curriculum(topic: str, intent: str, level: str = "intermediate") -> list[dict]:
     """Generate an 8-concept curriculum graph using LLM."""
     intent_context = {
@@ -253,14 +376,19 @@ Rules:
         logger.info("curriculum_cache_hit", topic=topic)
         return _curriculum_cache[cache_key]
 
-    content = await call_llm(prompt)
     try:
+        content = await call_llm(prompt)
         parsed = json.loads(extract_json(content))
         concepts = parsed["concepts"]
         _curriculum_cache[cache_key] = concepts
         return concepts
-    except (json.JSONDecodeError, KeyError) as e:
-        raise ValueError(f"LLM returned invalid JSON: {e}\nRaw: {content}")
+    except Exception as exc:
+        logger.warning(
+            "llm_fallback_curriculum",
+            topic=topic,
+            error=str(exc),
+        )
+        return _fallback_curriculum(topic)
 
 
 async def generate_next_question(
@@ -301,8 +429,8 @@ Return ONLY a valid JSON object with NO comments, NO markdown, and NO extra text
 Valid values: difficultyAdjustment = easier | same | harder. formatSwitch = text | visual | interactive | none.
 Options must be 4 short answer choices with exactly one correct; correctIndex is 0-3."""
 
-    content = await call_llm(prompt)
     try:
+        content = await call_llm(prompt)
         parsed = json.loads(extract_json(content))
         options = parsed.get("options", [])
         if not isinstance(options, list):
@@ -322,6 +450,15 @@ Options must be 4 short answer choices with exactly one correct; correctIndex is
         }
     except (json.JSONDecodeError, KeyError) as e:
         raise ValueError(f"LLM returned invalid JSON: {e}\nRaw: {content}")
+    except RuntimeError as exc:
+        logger.warning(
+            "llm_fallback_next_question",
+            topic=topic,
+            mood=current_mood,
+            wrong_streak=wrong_streak,
+            error=str(exc),
+        )
+        return _fallback_question(topic, current_mood, history_correct, history_total, wrong_streak)
 
 
 async def generate_intervention(
@@ -354,8 +491,8 @@ Return ONLY valid JSON, no markdown:
 
 Valid values: difficultyAdjustment = easier | same | harder. formatSwitch = text | visual | interactive | none."""
 
-    content = await call_llm(prompt)
     try:
+        content = await call_llm(prompt)
         parsed = json.loads(extract_json(content))
         return {
             "coachMessage": parsed.get("coachMessage", ""),
@@ -365,6 +502,15 @@ Valid values: difficultyAdjustment = easier | same | harder. formatSwitch = text
         }
     except (json.JSONDecodeError, KeyError) as e:
         raise ValueError(f"LLM returned invalid JSON: {e}\nRaw: {content}")
+    except RuntimeError as exc:
+        logger.warning(
+            "llm_fallback_intervention",
+            topic=topic,
+            mood=current_mood,
+            wrong_streak=wrong_streak,
+            error=str(exc),
+        )
+        return _fallback_intervention(topic, current_mood, history_correct, history_total, wrong_streak)
 
 async def grade_answer(question: str, answer: str) -> dict:
     prompt = f"""You are an expert tutor evaluating a student's answer.
@@ -380,8 +526,8 @@ Return ONLY a valid JSON object with NO comments, NO markdown, and NO extra text
   "feedback": "Great job! That is correct because..."
 }}"""
 
-    content = await call_llm(prompt)
     try:
+        content = await call_llm(prompt)
         parsed = json.loads(extract_json(content))
         return {
             "is_correct": bool(parsed.get("is_correct", False)),
@@ -389,3 +535,58 @@ Return ONLY a valid JSON object with NO comments, NO markdown, and NO extra text
         }
     except (json.JSONDecodeError, KeyError) as e:
         raise ValueError(f"LLM returned invalid JSON: {e}\nRaw: {content}")
+    except RuntimeError as exc:
+        logger.warning("llm_fallback_grade_answer", error=str(exc))
+        return _fallback_grade_answer(question, answer)
+
+
+def _fallback_session_summary(topic: str, answers_correct: int, answers_total: int, weak_concepts: list[str], dominant_mood: str) -> str:
+    accuracy = round((answers_correct / answers_total) * 100) if answers_total else 0
+    revisit = ", ".join(weak_concepts[:2]) if weak_concepts else "the next stretch concept"
+    return (
+        f"You practiced {topic} and answered {answers_correct} of {answers_total} questions correctly ({accuracy}%). "
+        f"Your dominant learning state was {dominant_mood}, so the tutor adjusted pacing around your current signal. "
+        f"Next time, revisit {revisit} before moving into harder questions."
+    )
+
+
+async def generate_session_summary(
+    topic: str,
+    answers_correct: int,
+    answers_total: int,
+    concept_mastery: list[dict],
+    mood_counts: dict[str, int],
+) -> str:
+    dominant_mood = max(mood_counts.items(), key=lambda item: item[1])[0] if mood_counts else "Flow"
+    weak_concepts = [
+        item.get("concept", "a weaker concept")
+        for item in concept_mastery
+        if item.get("status") in {"amber", "red"}
+    ]
+    fallback = _fallback_session_summary(topic, answers_correct, answers_total, weak_concepts, dominant_mood)
+
+    prompt = f"""You are writing a teacher-facing post-session recap for an adaptive tutoring app.
+
+Topic: {topic}
+Correct answers: {answers_correct}
+Total answers: {answers_total}
+Dominant mood: {dominant_mood}
+Concept mastery JSON: {json.dumps(concept_mastery)}
+Mood counts JSON: {json.dumps(mood_counts)}
+
+Write exactly 3 short sentences:
+1. What the student learned or practiced.
+2. What their mood/performance pattern suggests.
+3. What to revisit next.
+
+Return plain text only."""
+
+    try:
+        content = await call_llm(prompt)
+        sentences = [part.strip() for part in re.split(r"(?<=[.!?])\s+", content.strip()) if part.strip()]
+        if len(sentences) >= 3:
+            return " ".join(sentences[:3])
+        return content.strip() or fallback
+    except Exception as exc:
+        logger.warning("llm_fallback_session_summary", topic=topic, error=str(exc))
+        return fallback
