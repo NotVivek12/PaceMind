@@ -9,7 +9,7 @@ logger = structlog.get_logger()
 
 router = APIRouter(tags=["curriculum"])
 
-@router.post("/curriculum")
+@router.post("/generate")
 async def curriculum_generate(req: CurriculumRequest):
     try:
         concepts = await generate_curriculum(req.topic, req.intent, req.level)

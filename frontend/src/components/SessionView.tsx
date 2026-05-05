@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { evaluateMoodSignals, evaluateSession, getNextQuestion, gradeAnswer } from '@/lib/api';
+import { evaluateMoodSignals, evaluateSession, getNextQuestion, gradeAnswer, getIntervention } from '@/lib/api';
 import type { SessionData } from '@/app/page';
 import type { MoodState, Concept, Intervention, FaceExpressionScores, KeystrokeSignals } from '@/types';
 
@@ -16,6 +16,13 @@ const MOOD_CONFIG: Record<MoodState, { emoji: string; label: string; color: stri
   Confused:   { emoji: '😕', label: 'Confused',   color: 'text-yellow-400' },
   Frustrated: { emoji: '😤', label: 'Frustrated', color: 'text-orange-400' },
   Disengaged: { emoji: '😴', label: 'Disengaged', color: 'text-red-400' },
+};
+
+const MOOD_COACH_STYLE: Record<MoodState, { border: string; bg: string; glow: string; icon: string }> = {
+  Flow:       { border: 'border-emerald-500/40', bg: 'from-emerald-500/15', glow: 'shadow-emerald-500/20', icon: '🟢' },
+  Confused:   { border: 'border-yellow-500/40',  bg: 'from-yellow-500/15',  glow: 'shadow-yellow-500/20',  icon: '🟡' },
+  Frustrated: { border: 'border-red-500/40',     bg: 'from-red-500/15',     glow: 'shadow-red-500/20',     icon: '🔴' },
+  Disengaged: { border: 'border-gray-500/40',    bg: 'from-gray-500/15',    glow: 'shadow-gray-500/20',    icon: '⚫' },
 };
 
 export default function SessionView({ session, onEnd }: Props) {
@@ -32,6 +39,8 @@ export default function SessionView({ session, onEnd }: Props) {
   const [timerActive, setTimerActive] = useState(false);
   const [wrongStreak, setWrongStreak] = useState(0);
   const [coachPulse, setCoachPulse] = useState(0);
+  const [conceptCorrectStreak, setConceptCorrectStreak] = useState(0);
+  const [difficultyBanner, setDifficultyBanner] = useState(false);
   const [loading, setLoading] = useState(true);
   const [correct, setCorrect] = useState(0);
   const [total, setTotal] = useState(0);
@@ -275,8 +284,31 @@ export default function SessionView({ session, onEnd }: Props) {
 
   useEffect(() => {
     if (mood !== lastMoodRef.current) {
+      const prevMood = lastMoodRef.current;
       lastMoodRef.current = mood;
       setCoachPulse((value) => value + 1);
+
+      // Fetch fresh intervention when mood changes mid-question
+      if (currentConcept && !loading) {
+        getIntervention({
+          topic: currentConcept.concept,
+          mood,
+          history_correct: correct,
+          history_total: total,
+          wrong_streak: wrongStreak,
+        })
+          .then((res) => {
+            setIntervention({
+              coachMessage: res.coachMessage || res.message,
+              difficultyAdjustment: res.difficultyAdjustment,
+              formatSwitch: res.formatSwitch as any,
+              tone: res.tone,
+            });
+          })
+          .catch(() => {
+            // Keep existing intervention on error
+          });
+      }
     }
   }, [mood]);
 
@@ -414,9 +446,18 @@ export default function SessionView({ session, onEnd }: Props) {
       const newCorrect = answeredCorrectly ? correct + 1 : correct;
       const newTotal = total + 1;
       const newWrongStreak = answeredCorrectly ? 0 : wrongStreak + 1;
+      const newConceptStreak = answeredCorrectly ? conceptCorrectStreak + 1 : 0;
       setCorrect(newCorrect);
       setTotal(newTotal);
       setWrongStreak(newWrongStreak);
+      setConceptCorrectStreak(newConceptStreak);
+
+      // Show difficulty banner when streak triggers easier questions
+      if (newWrongStreak >= 3) {
+        setDifficultyBanner(true);
+      } else {
+        setDifficultyBanner(false);
+      }
 
       // Infer mood
       try {
@@ -442,14 +483,26 @@ export default function SessionView({ session, onEnd }: Props) {
   }
 
   async function handleNext() {
-    const nextIndex = conceptIndex + 1;
-    if (nextIndex >= session.concepts.length) {
-      // Session complete
-      onEnd();
-      return;
+    // If last answer was correct AND we have 2+ correct in a row on this concept → advance
+    const shouldAdvanceConcept = isCorrect && conceptCorrectStreak >= 2;
+
+    if (shouldAdvanceConcept) {
+      const nextIndex = conceptIndex + 1;
+      if (nextIndex >= session.concepts.length) {
+        onEnd();
+        return;
+      }
+      setConceptIndex(nextIndex);
+      setConceptCorrectStreak(0);
+      setDifficultyBanner(false);
     }
-    setConceptIndex(nextIndex);
-    // Load question for new concept
+    // Otherwise: stay on same concept (retry with potentially easier question)
+
+    // Load next question for current or next concept
+    const targetIndex = shouldAdvanceConcept ? conceptIndex + 1 : conceptIndex;
+    const targetConcept = session.concepts[targetIndex];
+    if (!targetConcept) { onEnd(); return; }
+
     setLoading(true);
     setAnswer('');
     setShowFeedback(false);
@@ -463,10 +516,9 @@ export default function SessionView({ session, onEnd }: Props) {
     resetKeystrokeStats();
     startTimeRef.current = Date.now();
     try {
-      const nextConcept = session.concepts[nextIndex];
       const res = await getNextQuestion({
         current_mood: mood,
-        concept_id: nextConcept.concept,
+        concept_id: targetConcept.concept,
         previous_performance: { correct, total },
         wrong_streak: wrongStreak,
       });
@@ -699,7 +751,7 @@ export default function SessionView({ session, onEnd }: Props) {
                 {showFeedback && (
                   <motion.div
                     initial={{ opacity: 0, y: 8, scale: 0.95 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    animate={wrongStreak >= 3 ? "frustrated" : { opacity: 1, y: 0, scale: 1 }}
                     transition={{ type: "spring", stiffness: 400 }}
                     className={`w-full rounded-xl border px-5 py-4 text-sm shadow-lg ${
                        isCorrect
@@ -709,9 +761,8 @@ export default function SessionView({ session, onEnd }: Props) {
                          : 'border-orange-500/30 bg-orange-500/10 text-orange-300 drop-shadow-orange-500/50'
                       }`}
                     variants={{
-                      frustrated: { x: [-10, 10, -5, 5, 0], transition: { duration: 0.5 } }
+                      frustrated: { x: [-10, 10, -5, 5, 0], opacity: 1, y: 0, scale: 1, transition: { duration: 0.5 } }
                     }}
-                    animate={wrongStreak >= 3 ? "frustrated" : false}
                   >
                     <div className="flex items-center gap-2 mb-2">
                       <span className="font-semibold text-base">{isCorrect ? 'Correct!' : 'Keep trying!'}</span>
@@ -741,9 +792,22 @@ export default function SessionView({ session, onEnd }: Props) {
                   <button
                     id="next-question-btn"
                     onClick={handleNext}
-                    className="w-full py-4 rounded-2xl bg-purple-600 hover:bg-purple-500 text-white font-semibold transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
+                    className={`w-full py-4 rounded-2xl text-white font-semibold transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] ${
+                      isCorrect && conceptCorrectStreak >= 1
+                        ? 'bg-emerald-600 hover:bg-emerald-500 shadow-lg shadow-emerald-500/25'
+                        : 'bg-purple-600 hover:bg-purple-500'
+                    }`}
                   >
-                    {conceptIndex + 1 < session.concepts.length ? 'Next Question' : 'Complete Session'}
+                    {conceptIndex + 1 >= session.concepts.length && isCorrect && conceptCorrectStreak >= 2
+                      ? 'Complete Session'
+                      : isCorrect && conceptCorrectStreak >= 2
+                      ? `✓ Mastered! Next Concept →`
+                      : isCorrect
+                      ? 'Next Question (same concept)'
+                      : wrongStreak >= 3
+                      ? '🔄 Try Easier Question'
+                      : 'Try Again'
+                    }
                   </button>
                 )}
               </>
@@ -751,24 +815,71 @@ export default function SessionView({ session, onEnd }: Props) {
           </section>
 
           <aside className="space-y-4">
+            {/* Difficulty Adjustment Banner */}
+            {difficultyBanner && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-300 flex items-center gap-2"
+              >
+                <motion.span
+                  animate={{ rotate: [0, 360] }}
+                  transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+                >
+                  🔄
+                </motion.span>
+                <span className="font-medium">Difficulty adjusted</span>
+                <span className="text-amber-400/70">— serving an easier question</span>
+              </motion.div>
+            )}
+
+            {/* Mood-Colored Coach Card */}
             <motion.div
               key={`coach-${coachPulse}`}
-              initial={{ opacity: 0, y: 20, scale: 0.95 }}
+              initial={{ opacity: 0, y: 20, scale: 0.9 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -10, scale: 0.95 }}
-              transition={{ duration: 0.4, type: "spring", stiffness: 400 }}
-              className="rounded-2xl border border-purple-500/30 bg-gradient-to-br from-purple-500/15 via-transparent to-transparent p-5 shadow-2xl drop-shadow-purple-500/50"
+              transition={{ duration: 0.5, type: "spring", stiffness: 300, damping: 15 }}
+              className={`rounded-2xl border-2 ${MOOD_COACH_STYLE[mood].border} bg-gradient-to-br ${MOOD_COACH_STYLE[mood].bg} via-transparent to-transparent p-5 shadow-2xl ${MOOD_COACH_STYLE[mood].glow} transition-colors duration-500`}
               whileHover={{ scale: 1.02, y: -2 }}
             >
               <div className="flex items-center justify-between mb-3">
-                <span className="text-sm font-semibold text-purple-200">Coach response</span>
-                <span className={`text-xs font-semibold ${moodCfg.color}`}>Mood: {moodCfg.label}</span>
+                <div className="flex items-center gap-2">
+                  <motion.span
+                    className="text-lg"
+                    animate={{ scale: [1, 1.3, 1] }}
+                    transition={{ duration: 0.6, repeat: 2 }}
+                  >
+                    {MOOD_COACH_STYLE[mood].icon}
+                  </motion.span>
+                  <span className="text-sm font-semibold text-white/90">AI Coach</span>
+                </div>
+                <motion.span
+                  className={`text-xs font-bold px-2 py-0.5 rounded-full ${moodCfg.color} bg-white/5`}
+                  animate={{ scale: [1, 1.1, 1] }}
+                  transition={{ duration: 0.4 }}
+                >
+                  {moodCfg.emoji} {moodCfg.label}
+                </motion.span>
               </div>
-              <p className="text-sm text-white/80 leading-relaxed">
+              <motion.p
+                key={intervention?.coachMessage}
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.3 }}
+                className="text-sm text-white/80 leading-relaxed"
+              >
                 {intervention?.coachMessage || 'Stay focused and keep experimenting. Your next step is coming.'}
-              </p>
+              </motion.p>
               <div className="flex flex-wrap gap-2 mt-4">
-                <span className="rounded-full bg-white/10 px-3 py-1 text-xs text-white/70">
+                <span className={`rounded-full px-3 py-1 text-xs font-medium ${
+                  intervention?.difficultyAdjustment === 'easier'
+                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                    : intervention?.difficultyAdjustment === 'harder'
+                    ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
+                    : 'bg-white/10 text-white/70'
+                }`}>
                   Difficulty: {intervention?.difficultyAdjustment ?? 'same'}
                 </span>
                 <span className="rounded-full bg-white/10 px-3 py-1 text-xs text-white/70">
