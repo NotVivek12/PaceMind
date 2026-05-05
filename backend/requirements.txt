@@ -3,3 +3,9 @@ uvicorn[standard]
 httpx
 python-dotenv
 python-multipart
+pydantic-settings
+structlog
+pytest
+pytest-asyncio
+PyPDF2
+supabase

@@ -1,15 +1,16 @@
 'use client';
 
 import { useState } from 'react';
-import OnboardingFlow from '@/components/OnboardingFlow';
+import SubjectPicker from '@/components/SubjectPicker';
 import SessionView from '@/components/SessionView';
-import type { Concept, MoodState } from '@/types';
+import type { Concept, StudentLevel } from '@/types';
 
 export type AppScreen = 'home' | 'onboarding' | 'session';
 
 export interface SessionData {
   topic: string;
   concepts: Concept[];
+  level?: StudentLevel;
 }
 
 export default function HomePage() {
@@ -23,7 +24,7 @@ export default function HomePage() {
 
   if (screen === 'onboarding') {
     return (
-      <OnboardingFlow
+      <SubjectPicker
         onComplete={startSession}
         onBack={() => setScreen('home')}
       />
@@ -64,39 +65,36 @@ export default function HomePage() {
         </button>
       </div>
 
-      {/* Three Paths */}
+      {/* Feature Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full max-w-4xl">
         {[
           {
-            id: 'path-a',
+            id: 'feature-curriculum',
             icon: '🧠',
-            title: 'Teach me from scratch',
-            desc: 'Pick a subject — AI builds a full learning path with concepts, quizzes and examples.',
-            color: 'purple',
+            title: 'AI Curriculum Builder',
+            desc: 'Pick a subject — AI builds 8 ordered concepts with a diagnostic quiz to match your level.',
           },
           {
-            id: 'path-b',
+            id: 'feature-notes',
             icon: '📄',
-            title: 'I have my own notes',
-            desc: 'Upload your class notes or textbook. AI extracts concepts and quizzes you on exactly what your teacher taught.',
-            color: 'blue',
+            title: 'Smart Notes Upload',
+            desc: 'Upload your PDF or paste notes. AI extracts key concepts and quizzes you on exactly what matters.',
           },
           {
-            id: 'path-c',
-            icon: '🌐',
-            title: 'Find resources online',
-            desc: 'Name a topic — AI curates a playlist of YouTube, Khan Academy, and papers. No raw search dumps.',
-            color: 'emerald',
+            id: 'feature-mood',
+            icon: '🎭',
+            title: 'Mood-Aware Coaching',
+            desc: 'Your typing speed, pauses, and edits reveal your mood. AI adapts tone and difficulty in real-time.',
           },
-        ].map((path) => (
+        ].map((feature) => (
           <div
-            key={path.id}
-            id={path.id}
-            className="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur hover:border-purple-500/40 hover:bg-white/8 transition-all duration-200 cursor-default"
+            key={feature.id}
+            id={feature.id}
+            className="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur hover:border-purple-500/40 hover:bg-white/[0.08] transition-all duration-200 cursor-default"
           >
-            <div className="text-3xl mb-4">{path.icon}</div>
-            <h2 className="font-semibold text-white mb-2">{path.title}</h2>
-            <p className="text-sm text-white/50 leading-relaxed">{path.desc}</p>
+            <div className="text-3xl mb-4">{feature.icon}</div>
+            <h2 className="font-semibold text-white mb-2">{feature.title}</h2>
+            <p className="text-sm text-white/50 leading-relaxed">{feature.desc}</p>
           </div>
         ))}
       </div>

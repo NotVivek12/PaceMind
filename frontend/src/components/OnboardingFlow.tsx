@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { generateCurriculum, extractContent } from '@/lib/api';
 import type { SessionData } from '@/app/page';
-import type { Intent } from '@/types';
+import type { Intent, StudentLevel } from '@/types';
 
 type Step = 'path' | 'topic' | 'loading';
 
@@ -18,11 +18,18 @@ const INTENT_LABELS: { value: Intent; label: string; desc: string }[] = [
   { value: 'curiosity', label: '🔭 Curiosity', desc: 'Open exploration mode' },
 ];
 
+const LEVEL_LABELS: { value: StudentLevel; label: string; desc: string }[] = [
+  { value: 'beginner', label: '🌱 Beginner', desc: 'Start from absolute basics' },
+  { value: 'intermediate', label: '📈 Intermediate', desc: 'Deepen your understanding' },
+  { value: 'advanced', label: '🚀 Advanced', desc: 'Tackle challenging material' },
+];
+
 export default function OnboardingFlow({ onComplete, onBack }: Props) {
   const [step, setStep] = useState<Step>('path');
   const [path, setPath] = useState<'A' | 'B' | null>(null);
   const [topic, setTopic] = useState('');
   const [intent, setIntent] = useState<Intent>('exam_prep');
+  const [level, setLevel] = useState<StudentLevel>('intermediate');
   const [notes, setNotes] = useState('');
   const [error, setError] = useState('');
 
@@ -32,7 +39,7 @@ export default function OnboardingFlow({ onComplete, onBack }: Props) {
     try {
       let concepts;
       if (path === 'A') {
-        const res = await generateCurriculum({ topic, intent });
+        const res = await generateCurriculum({ topic, intent, level });
         concepts = res.concepts;
       } else {
         const res = await extractContent({ text: notes, type: 'notes' });
@@ -102,7 +109,7 @@ export default function OnboardingFlow({ onComplete, onBack }: Props) {
               />
 
               <label className="block text-sm text-white/60 mb-3">Learning intent</label>
-              <div className="grid grid-cols-1 gap-2 mb-8">
+              <div className="grid grid-cols-1 gap-2 mb-6">
                 {INTENT_LABELS.map((opt) => (
                   <button
                     key={opt.value}
@@ -110,6 +117,25 @@ export default function OnboardingFlow({ onComplete, onBack }: Props) {
                     onClick={() => setIntent(opt.value)}
                     className={`text-left px-4 py-3 rounded-xl border transition-all duration-150 ${
                       intent === opt.value
+                        ? 'border-purple-500/60 bg-purple-500/10 text-white'
+                        : 'border-white/10 bg-white/5 text-white/60 hover:border-white/20'
+                    }`}
+                  >
+                    <span className="font-medium">{opt.label}</span>
+                    <span className="text-xs ml-2 opacity-60">{opt.desc}</span>
+                  </button>
+                ))}
+              </div>
+
+              <label className="block text-sm text-white/60 mb-3">Current level</label>
+              <div className="grid grid-cols-1 gap-2 mb-8">
+                {LEVEL_LABELS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    id={`level-${opt.value}`}
+                    onClick={() => setLevel(opt.value)}
+                    className={`text-left px-4 py-3 rounded-xl border transition-all duration-150 ${
+                      level === opt.value
                         ? 'border-purple-500/60 bg-purple-500/10 text-white'
                         : 'border-white/10 bg-white/5 text-white/60 hover:border-white/20'
                     }`}
