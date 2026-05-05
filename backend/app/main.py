@@ -68,7 +68,7 @@ def create_app() -> FastAPI:
     app.include_router(session.router)
     app.include_router(analytics.router)
 
-    app.include_router(curriculum.router, prefix="/api")
+    app.include_router(curriculum.router, prefix="/api/curriculum")
     app.include_router(mood.router, prefix="/api")
     app.include_router(questions.router, prefix="/api")
     app.include_router(intervention.router, prefix="/api")

@@ -151,3 +151,27 @@ export const gradeAnswer = (req: GradeAnswerRequest) =>
     req,
     LLM_TIMEOUT,
   );
+
+/** Intervention — fetch fresh coach message based on mood + performance */
+export interface InterventionRequest {
+  topic: string;
+  mood: string;
+  history_correct: number;
+  history_total: number;
+  wrong_streak: number;
+}
+
+export interface InterventionResponse {
+  message: string;
+  coachMessage: string;
+  difficultyAdjustment: 'easier' | 'same' | 'harder';
+  formatSwitch: string;
+  tone: string;
+}
+
+export const getIntervention = (req: InterventionRequest) =>
+  post<InterventionRequest, InterventionResponse>(
+    '/api/intervention',
+    req,
+    LLM_TIMEOUT,
+  );
