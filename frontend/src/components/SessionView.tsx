@@ -551,364 +551,371 @@ export default function SessionView({ session, onEnd }: Props) {
   const accuracyPct = total > 0 ? Math.round((correct / total) * 100) : 0;
 
   return (
-    <div className="min-h-screen flex flex-col bg-white">
-      {/* Header */}
-      <header className="sticky top-0 z-10 border-b border-[#d1e0d3] bg-white/95 backdrop-blur px-6 py-3 flex items-center justify-between">
-        <div>
-          <span className="text-sm text-[#4b6b50]">Studying: </span>
-          <span className="text-sm font-medium text-[#1a2e1c]">{session.topic}</span>
+    /* Full viewport, no scroll on the outer shell */
+    <div className="h-screen flex flex-col bg-[#f4f7f4] overflow-hidden">
+
+      {/* ── Slim header ──────────────────────────────────────────────────── */}
+      <header className="flex-none border-b border-[#d1e0d3] bg-white px-5 py-2.5 flex items-center justify-between gap-4">
+        {/* Left: topic */}
+        <div className="flex items-center gap-3 min-w-0">
+          <span className="text-xs text-[#4b6b50] shrink-0">Studying</span>
+          <span className="text-sm font-semibold text-[#1a2e1c] truncate">{session.topic}</span>
+          <span className="text-xs text-[#4b6b50] shrink-0">{conceptIndex + 1}/{session.concepts.length}</span>
         </div>
-        <div className="flex items-center gap-4">
-          {/* Mood badge - animated pulse on change */}
-          <motion.div
-            key={`mood-${mood}-${coachPulse}`}
-            initial={{ scale: 0.8, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ type: "spring", stiffness: 400, damping: 10 }}
-            className={`flex items-center gap-1.5 text-sm font-medium ${moodCfg.color} drop-shadow-lg`}
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
+
+        {/* Centre: progress bar */}
+        <div className="flex-1 max-w-xs h-1.5 rounded-full bg-[#d1e0d3] overflow-hidden">
+          <div
+            className="h-full bg-gradient-to-r from-green-600 to-green-400 transition-all duration-500"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+
+        {/* Right: score + override + end */}
+        <div className="flex items-center gap-3 shrink-0">
+          <span className="text-xs text-[#4b6b50]">{correct}/{total} correct</span>
+          <select
+            value={overrideMood ?? 'Auto'}
+            onChange={(e) => {
+              const v = e.target.value as MoodState | 'Auto';
+              setOverrideMood(v === 'Auto' ? null : v);
+            }}
+            className="rounded-lg border border-[#d1e0d3] bg-white px-2 py-1 text-xs text-[#1a2e1c] outline-none"
           >
-            <motion.span
-              animate={{ scale: [1, 1.2, 1], opacity: [1, 0.8, 1] }}
-              transition={{ duration: 1, repeat: Infinity, repeatType: "reverse" }}
-            >
-              {moodCfg.emoji}
-            </motion.span>
-            <span>{moodCfg.label}</span>
-            {overrideMood && <span className="text-xs text-[#4b6b50]">Manual</span>}
-          </motion.div>
-
-          {/* Webcam badge */}
-          <div className="flex items-center gap-2 rounded-full border border-[#d1e0d3] bg-[#f4f7f4] px-3 py-1 text-xs text-[#4b6b50]">
-            <span
-              className={`h-2 w-2 rounded-full ${
-                cameraState === 'active' ? 'bg-green-500'
-                  : cameraState === 'requesting' ? 'bg-yellow-400'
-                  : cameraState === 'denied' ? 'bg-red-400'
-                  : cameraState === 'error' ? 'bg-red-400'
-                  : 'bg-[#d1e0d3]'
-              }`}
-            />
-            <div className="h-5 w-8 overflow-hidden rounded bg-black/10">
-              <video
-                ref={videoRef}
-                muted
-                playsInline
-                className={`h-full w-full object-cover ${cameraState === 'active' ? 'opacity-100' : 'opacity-40'}`}
-              />
-            </div>
-            <span>
-              Webcam {cameraState === 'active' ? 'On' : cameraState === 'requesting' ? 'Starting' : cameraState === 'error' ? 'Error' : 'Off'}
-            </span>
-            {expressionMood && <span className="text-[#1a2e1c]">({expressionMood})</span>}
-            <button
-              onClick={() => {
-                if (cameraState === 'active') { stopCamera(); } else { setShowCamConsent(true); }
-              }}
-              className="ml-1 rounded-full border border-[#d1e0d3] bg-white px-2 py-0.5 text-[10px] text-[#4b6b50] hover:bg-[#e8f0e8]"
-            >
-              {cameraState === 'active' ? 'Stop' : 'Enable'}
-            </button>
-          </div>
-
-          {/* Manual override */}
-          <div className="flex items-center gap-2 text-xs text-[#4b6b50]">
-            <span>Override</span>
-            <select
-              value={overrideMood ?? 'Auto'}
-              onChange={(event) => {
-                const value = event.target.value as MoodState | 'Auto';
-                setOverrideMood(value === 'Auto' ? null : value);
-              }}
-              className="rounded-lg border border-[#d1e0d3] bg-white px-2 py-1 text-xs text-[#1a2e1c] outline-none"
-            >
-              <option value="Auto">Auto</option>
-              <option value="Flow">Flow</option>
-              <option value="Confused">Confused</option>
-              <option value="Frustrated">Frustrated</option>
-              <option value="Disengaged">Disengaged</option>
-            </select>
-          </div>
-
-          <span className="text-sm text-[#4b6b50]">{correct}/{total} correct</span>
+            <option value="Auto">Mood: Auto</option>
+            <option value="Flow">Flow</option>
+            <option value="Confused">Confused</option>
+            <option value="Frustrated">Frustrated</option>
+            <option value="Disengaged">Disengaged</option>
+          </select>
           <button
             id="end-session-btn"
             onClick={onEnd}
-            className="text-sm text-[#4b6b50] hover:text-[#1a2e1c] transition-colors"
+            className="text-xs text-[#4b6b50] hover:text-red-500 transition-colors border border-[#d1e0d3] rounded-lg px-3 py-1 hover:border-red-300"
           >
             End Session
           </button>
         </div>
       </header>
 
-      {/* Progress bar */}
-      <div className="h-1 bg-[#d1e0d3]">
-        <div
-          className="h-full bg-gradient-to-r from-green-600 to-green-400 transition-all duration-500"
-          style={{ width: `${progress}%` }}
-        />
-      </div>
+      {/* ── Body: left (questions) + right (webcam + coach) ──────────────── */}
+      <div className="flex-1 flex overflow-hidden">
 
-      {/* Main content */}
-      <main className="flex-1 px-6 py-10 bg-[#f4f7f4]">
-        <div className="mx-auto w-full max-w-5xl grid gap-6 lg:grid-cols-[1.3fr,0.7fr]">
-          <section className="space-y-5">
-            {currentConcept && (
-              <div className="rounded-2xl border border-[#d1e0d3] bg-white p-4 shadow-sm">
-                <span className="text-xs text-[#4b6b50] uppercase tracking-wider">Concept {conceptIndex + 1} of {session.concepts.length}</span>
-                <h2 className="text-xl font-semibold text-[#1a2e1c] mt-1">{currentConcept.concept}</h2>
-                <div className="flex items-center gap-3 mt-3">
-                  <div className="flex gap-1">
-                    {Array.from({ length: currentConcept.difficulty }).map((_, i) => (
-                      <span key={i} className="w-2 h-2 rounded-full bg-green-500" />
-                    ))}
-                    {Array.from({ length: Math.max(0, 5 - currentConcept.difficulty) }).map((_, i) => (
-                      <span key={i} className="w-2 h-2 rounded-full bg-[#d1e0d3]" />
-                    ))}
+        {/* ── LEFT: concept + question + options + submit ──────────────── */}
+        <main className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-3">
+
+          {/* Concept card */}
+          {currentConcept && (
+            <div className="rounded-2xl border border-[#d1e0d3] bg-white px-4 py-3 shadow-sm flex items-center justify-between">
+              <div>
+                <span className="text-[10px] text-[#4b6b50] uppercase tracking-wider">
+                  Concept {conceptIndex + 1} of {session.concepts.length}
+                </span>
+                <h2 className="text-base font-semibold text-[#1a2e1c] mt-0.5">{currentConcept.concept}</h2>
+              </div>
+              <div className="flex gap-1 shrink-0 ml-4">
+                {Array.from({ length: currentConcept.difficulty }).map((_, i) => (
+                  <span key={i} className="w-2 h-2 rounded-full bg-green-500" />
+                ))}
+                {Array.from({ length: Math.max(0, 5 - currentConcept.difficulty) }).map((_, i) => (
+                  <span key={i} className="w-2 h-2 rounded-full bg-[#d1e0d3]" />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {loading ? (
+            <div className="flex-1 flex flex-col items-center justify-center gap-3">
+              <div className="w-8 h-8 rounded-full border-4 border-green-500 border-t-transparent animate-spin" />
+              <p className="text-sm text-[#4b6b50]">Generating question…</p>
+            </div>
+          ) : (
+            <>
+              {/* Question */}
+              <div className="rounded-2xl border border-[#d1e0d3] bg-white px-5 py-4 shadow-sm">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-[10px] uppercase tracking-wider text-[#4b6b50]">Question</span>
+                  <div className="flex items-center gap-2 text-xs text-[#4b6b50]">
+                    <div className="h-1.5 w-20 rounded-full bg-[#d1e0d3] overflow-hidden">
+                      <div
+                        className={`h-full transition-all duration-1000 ${timePct <= 25 ? 'bg-red-400' : 'bg-green-500'}`}
+                        style={{ width: `${timePct}%` }}
+                      />
+                    </div>
+                    <span className="tabular-nums">{timeLeft}s</span>
                   </div>
-                  <span className="text-xs text-[#4b6b50]">Difficulty {currentConcept.difficulty}/5</span>
                 </div>
+                <p className="text-[#1a2e1c] text-base leading-relaxed">{currentQuestion}</p>
               </div>
-            )}
 
-            {loading ? (
-              <div className="flex flex-col items-center gap-4 py-20">
-                <div className="w-10 h-10 rounded-full border-4 border-green-500 border-t-transparent animate-spin" />
-                <p className="text-[#4b6b50]">Generating question...</p>
-              </div>
-            ) : (
-              <>
-                <div className="rounded-2xl border border-[#d1e0d3] bg-white p-6 shadow-sm">
-                  <div className="flex items-center justify-between mb-4">
-                    <span className="text-xs uppercase tracking-wider text-[#4b6b50]">Question</span>
-                    <div className="flex items-center gap-2 text-xs text-[#4b6b50]">
-                      <div className="h-2 w-24 rounded-full bg-[#d1e0d3] overflow-hidden">
-                        <div
-                          className={`h-full ${timePct <= 25 ? 'bg-red-400' : 'bg-green-500'}`}
-                          style={{ width: `${timePct}%` }}
-                        />
+              {/* Options */}
+              <div className="grid gap-2">
+                {options.map((option, index) => {
+                  const selected = selectedOptionIndex === index;
+                  const revealCorrect = showFeedback && typeof correctIndex === 'number';
+                  const isCorrectChoice = revealCorrect && correctIndex === index;
+                  const isWrongChoice = revealCorrect && selected && correctIndex !== index;
+                  return (
+                    <button
+                      key={`${option}-${index}`}
+                      onClick={() => setSelectedOptionIndex(index)}
+                      disabled={showFeedback}
+                      className={`w-full rounded-xl border px-4 py-2.5 text-left transition-all text-sm ${
+                        isCorrectChoice
+                          ? 'border-green-500 bg-green-50'
+                          : isWrongChoice
+                          ? 'border-red-300 bg-red-50'
+                          : selected
+                          ? 'border-green-500 bg-green-50'
+                          : 'border-[#d1e0d3] bg-white hover:border-green-400 hover:bg-[#f4f7f4]'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="h-7 w-7 rounded-full bg-[#e8f0e8] text-xs text-[#4b6b50] flex items-center justify-center font-semibold shrink-0">
+                          {String.fromCharCode(65 + index)}
+                        </span>
+                        <span className="text-[#1a2e1c]">{option}</span>
                       </div>
-                      <span>{timeLeft}s</span>
-                    </div>
-                  </div>
-                  <p className="text-[#1a2e1c] text-lg leading-relaxed">{currentQuestion}</p>
-                </div>
-
-                <div className="grid gap-2">
-                  {options.map((option, index) => {
-                    const selected = selectedOptionIndex === index;
-                    const revealCorrect = showFeedback && typeof correctIndex === 'number';
-                    const isCorrectChoice = revealCorrect && correctIndex === index;
-                    const isWrongChoice = revealCorrect && selected && correctIndex !== index;
-                    return (
-                      <button
-                        key={`${option}-${index}`}
-                        onClick={() => setSelectedOptionIndex(index)}
-                        disabled={showFeedback}
-                        className={`w-full rounded-xl border px-4 py-3 text-left transition-all ${
-                          selected
-                            ? 'border-green-500 bg-green-50'
-                            : 'border-[#d1e0d3] bg-white hover:border-green-400 hover:bg-[#f4f7f4]'
-                        } ${
-                          isCorrectChoice ? 'border-green-500 bg-green-50'
-                            : isWrongChoice ? 'border-red-300 bg-red-50'
-                            : ''
-                        }`}
-                      >
-                        <div className="flex items-center gap-3">
-                          <span className="h-8 w-8 rounded-full bg-[#e8f0e8] text-sm text-[#4b6b50] flex items-center justify-center font-medium">
-                            {String.fromCharCode(65 + index)}
-                          </span>
-                          <span className="text-sm text-[#1a2e1c]">{option}</span>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <textarea
-                  id="notes-input"
-                  ref={answerRef}
-                  value={answer}
-                  onChange={(e) => setAnswer(e.target.value)}
-                  disabled={showFeedback}
-                  placeholder="Optional: jot quick notes or reasoning..."
-                  rows={3}
-                  className="w-full rounded-xl border border-[#d1e0d3] bg-white px-4 py-3 text-[#1a2e1c] placeholder-[#4b6b50]/50 outline-none focus:border-green-500 transition-colors resize-none disabled:opacity-50 text-sm"
-                />
-
-                {showFeedback && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 8, scale: 0.95 }}
-                    animate={wrongStreak >= 3 ? "frustrated" : { opacity: 1, y: 0, scale: 1 }}
-                    transition={{ type: "spring", stiffness: 400 }}
-                    className={`w-full rounded-xl border px-5 py-4 text-sm shadow-sm ${
-                      isCorrect
-                        ? 'border-green-300 bg-green-50 text-green-700'
-                        : wrongStreak >= 3
-                        ? 'border-red-300 bg-red-50 text-red-600 animate-pulse'
-                        : 'border-orange-200 bg-orange-50 text-orange-600'
-                    }`}
-                    variants={{
-                      frustrated: { x: [-10, 10, -5, 5, 0], opacity: 1, y: 0, scale: 1, transition: { duration: 0.5 } }
-                    }}
-                  >
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="font-semibold text-base">{isCorrect ? 'Correct!' : 'Keep trying!'}</span>
-                      <span className={`font-semibold ml-auto ${moodCfg.color}`}>{moodCfg.emoji} {moodCfg.label}</span>
-                    </div>
-                    {feedbackText && <p className="leading-relaxed opacity-90">{feedbackText}</p>}
-                  </motion.div>
-                )}
-
-                {!showFeedback ? (
-                  <button
-                    id="submit-answer-btn"
-                    onClick={handleSubmit}
-                    disabled={selectedOptionIndex === null || isGrading}
-                    className="w-full py-4 rounded-2xl bg-green-600 hover:bg-green-500 disabled:opacity-30 disabled:cursor-not-allowed text-white font-semibold transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] flex justify-center items-center gap-2 shadow-md shadow-green-200"
-                  >
-                    {isGrading ? (
-                      <>
-                        <div className="w-5 h-5 rounded-full border-2 border-white/40 border-t-white animate-spin" />
-                        Grading...
-                      </>
-                    ) : 'Submit Answer'}
-                  </button>
-                ) : (
-                  <button
-                    id="next-question-btn"
-                    onClick={handleNext}
-                    className={`w-full py-4 rounded-2xl text-white font-semibold transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] shadow-md ${
-                      isCorrect && conceptCorrectStreak >= 1
-                        ? 'bg-green-600 hover:bg-green-500 shadow-green-200'
-                        : 'bg-[#1a2e1c] hover:bg-[#2d4a30] shadow-gray-200'
-                    }`}
-                  >
-                    {conceptIndex + 1 >= session.concepts.length && isCorrect && conceptCorrectStreak >= 2
-                      ? 'Complete Session'
-                      : isCorrect && conceptCorrectStreak >= 2
-                      ? '✓ Mastered! Next Concept →'
-                      : isCorrect
-                      ? 'Next Question (same concept)'
-                      : wrongStreak >= 3
-                      ? '🔄 Try Easier Question'
-                      : 'Try Again'
-                    }
-                  </button>
-                )}
-              </>
-            )}
-          </section>
-
-          <aside className="space-y-4">
-            {difficultyBanner && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700 flex items-center gap-2"
-              >
-                <motion.span animate={{ rotate: [0, 360] }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}>🔄</motion.span>
-                <span className="font-medium">Difficulty adjusted</span>
-                <span className="text-amber-600/70">— serving an easier question</span>
-              </motion.div>
-            )}
-
-            {/* Coach Card */}
-            <motion.div
-              key={`coach-${coachPulse}`}
-              initial={{ opacity: 0, y: 20, scale: 0.9 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -10, scale: 0.95 }}
-              transition={{ duration: 0.5, type: "spring", stiffness: 300, damping: 15 }}
-              className={`rounded-2xl border-2 ${MOOD_COACH_STYLE[mood].border} bg-gradient-to-br ${MOOD_COACH_STYLE[mood].bg} via-transparent to-transparent p-5 shadow-md ${MOOD_COACH_STYLE[mood].glow} transition-colors duration-500`}
-              whileHover={{ scale: 1.02, y: -2 }}
-            >
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <motion.span className="text-lg" animate={{ scale: [1, 1.3, 1] }} transition={{ duration: 0.6, repeat: 2 }}>
-                    {MOOD_COACH_STYLE[mood].icon}
-                  </motion.span>
-                  <span className="text-sm font-semibold text-[#1a2e1c]">AI Coach</span>
-                </div>
-                <motion.span
-                  className={`text-xs font-bold px-2 py-0.5 rounded-full ${moodCfg.color} bg-white/60`}
-                  animate={{ scale: [1, 1.1, 1] }}
-                  transition={{ duration: 0.4 }}
-                >
-                  {moodCfg.emoji} {moodCfg.label}
-                </motion.span>
+                    </button>
+                  );
+                })}
               </div>
-              <motion.p
-                key={intervention?.coachMessage}
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.3 }}
-                className="text-sm text-[#4b6b50] leading-relaxed"
-              >
-                {intervention?.coachMessage || 'Stay focused and keep experimenting. Your next step is coming.'}
-              </motion.p>
-              <div className="flex flex-wrap gap-2 mt-4">
-                <span className={`rounded-full px-3 py-1 text-xs font-medium ${
-                  intervention?.difficultyAdjustment === 'easier'
-                    ? 'bg-amber-100 text-amber-700 border border-amber-200'
-                    : intervention?.difficultyAdjustment === 'harder'
-                    ? 'bg-green-100 text-green-700 border border-green-200'
-                    : 'bg-[#e8f0e8] text-[#4b6b50]'
-                }`}>
-                  Difficulty: {intervention?.difficultyAdjustment ?? 'same'}
+
+              {/* Notes textarea */}
+              <textarea
+                id="notes-input"
+                ref={answerRef}
+                value={answer}
+                onChange={(e) => setAnswer(e.target.value)}
+                disabled={showFeedback}
+                placeholder="Optional: jot quick notes or reasoning…"
+                rows={2}
+                className="w-full rounded-xl border border-[#d1e0d3] bg-white px-4 py-2.5 text-[#1a2e1c] placeholder-[#4b6b50]/40 outline-none focus:border-green-500 transition-colors resize-none disabled:opacity-40 text-sm"
+              />
+
+              {/* Feedback */}
+              {showFeedback && (
+                <motion.div
+                  initial={{ opacity: 0, y: 6, scale: 0.97 }}
+                  animate={wrongStreak >= 3 ? 'frustrated' : { opacity: 1, y: 0, scale: 1 }}
+                  transition={{ type: 'spring', stiffness: 400 }}
+                  className={`rounded-xl border px-4 py-3 text-sm ${
+                    isCorrect
+                      ? 'border-green-300 bg-green-50 text-green-700'
+                      : wrongStreak >= 3
+                      ? 'border-red-300 bg-red-50 text-red-600 animate-pulse'
+                      : 'border-orange-200 bg-orange-50 text-orange-600'
+                  }`}
+                  variants={{
+                    frustrated: { x: [-8, 8, -4, 4, 0], opacity: 1, y: 0, scale: 1, transition: { duration: 0.4 } },
+                  }}
+                >
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <span className="font-semibold">{isCorrect ? 'Correct!' : 'Keep trying!'}</span>
+                    <span className={`ml-auto text-xs font-medium ${moodCfg.color}`}>{moodCfg.label}</span>
+                  </div>
+                  {feedbackText && <p className="opacity-90 leading-relaxed">{feedbackText}</p>}
+                </motion.div>
+              )}
+
+              {/* Difficulty banner */}
+              {difficultyBanner && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs text-amber-700 flex items-center gap-2">
+                  <RefreshCw className="w-3.5 h-3.5 shrink-0 animate-spin" />
+                  <span><span className="font-medium">Difficulty adjusted</span> — serving an easier question</span>
+                </div>
+              )}
+
+              {/* Submit / Next */}
+              {!showFeedback ? (
+                <button
+                  id="submit-answer-btn"
+                  onClick={handleSubmit}
+                  disabled={selectedOptionIndex === null || isGrading}
+                  className="w-full py-3 rounded-2xl bg-green-600 hover:bg-green-500 disabled:opacity-30 disabled:cursor-not-allowed text-white font-semibold transition-all duration-200 hover:scale-[1.01] active:scale-[0.99] flex justify-center items-center gap-2 shadow-sm"
+                >
+                  {isGrading ? (
+                    <>
+                      <div className="w-4 h-4 rounded-full border-2 border-white/40 border-t-white animate-spin" />
+                      Grading…
+                    </>
+                  ) : 'Submit Answer'}
+                </button>
+              ) : (
+                <button
+                  id="next-question-btn"
+                  onClick={handleNext}
+                  className={`w-full py-3 rounded-2xl text-white font-semibold transition-all duration-200 hover:scale-[1.01] active:scale-[0.99] shadow-sm ${
+                    isCorrect && conceptCorrectStreak >= 1
+                      ? 'bg-green-600 hover:bg-green-500'
+                      : 'bg-[#1a2e1c] hover:bg-[#2d4a30]'
+                  }`}
+                >
+                  {conceptIndex + 1 >= session.concepts.length && isCorrect && conceptCorrectStreak >= 2
+                    ? 'Complete Session ✓'
+                    : isCorrect && conceptCorrectStreak >= 2
+                    ? 'Mastered! Next Concept →'
+                    : isCorrect
+                    ? 'Next Question →'
+                    : wrongStreak >= 3
+                    ? 'Try Easier Question'
+                    : 'Try Again'}
+                </button>
+              )}
+            </>
+          )}
+        </main>
+
+        {/* ── RIGHT: webcam + mood + coach + signals ────────────────────── */}
+        <aside className="w-72 flex-none border-l border-[#d1e0d3] bg-white flex flex-col overflow-y-auto">
+
+          {/* Webcam feed */}
+          <div className="p-3 border-b border-[#d1e0d3]">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[10px] uppercase tracking-wider text-[#4b6b50] font-medium">Webcam</span>
+              <div className="flex items-center gap-1.5">
+                <span className={`w-1.5 h-1.5 rounded-full ${
+                  cameraState === 'active' ? 'bg-green-500 animate-pulse'
+                  : cameraState === 'requesting' ? 'bg-yellow-400 animate-pulse'
+                  : cameraState === 'denied' || cameraState === 'error' ? 'bg-red-400'
+                  : 'bg-[#d1e0d3]'
+                }`} />
+                <span className="text-[10px] text-[#4b6b50]">
+                  {cameraState === 'active' ? 'Live' : cameraState === 'requesting' ? 'Starting…' : cameraState === 'error' ? 'Error' : cameraState === 'denied' ? 'Denied' : 'Off'}
                 </span>
-                <span className="rounded-full bg-[#e8f0e8] px-3 py-1 text-xs text-[#4b6b50]">
-                  Tone: {intervention?.tone ?? 'encouraging'}
-                </span>
-                <span className="rounded-full bg-[#e8f0e8] px-3 py-1 text-xs text-[#4b6b50]">
-                  Format: {intervention?.formatSwitch ?? 'text'}
-                </span>
+                <button
+                  onClick={() => cameraState === 'active' ? stopCamera() : setShowCamConsent(true)}
+                  className="text-[10px] text-[#4b6b50] hover:text-[#1a2e1c] border border-[#d1e0d3] rounded px-1.5 py-0.5 hover:bg-[#f4f7f4] transition-colors"
+                >
+                  {cameraState === 'active' ? 'Stop' : 'Enable'}
+                </button>
+              </div>
+            </div>
+
+            {/* Video frame */}
+            <div className="relative w-full aspect-video rounded-xl overflow-hidden bg-[#f4f7f4] border border-[#d1e0d3]">
+              <video
+                ref={videoRef}
+                muted
+                playsInline
+                className={`w-full h-full object-cover ${cameraState === 'active' ? 'opacity-100' : 'opacity-0'}`}
+              />
+              {cameraState !== 'active' && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5">
+                  <div className="w-9 h-9 rounded-full bg-[#e8f0e8] flex items-center justify-center">
+                    <svg className="w-4 h-4 text-[#4b6b50]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z" />
+                    </svg>
+                  </div>
+                  <span className="text-[10px] text-[#4b6b50]">Camera off</span>
+                  <button
+                    onClick={() => setShowCamConsent(true)}
+                    className="text-[10px] text-green-600 hover:text-green-700 font-medium"
+                  >
+                    Enable →
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Mood detection */}
+          <div className="p-3 border-b border-[#d1e0d3]">
+            <span className="text-[10px] uppercase tracking-wider text-[#4b6b50] font-medium block mb-2">Mood Detection</span>
+            <motion.div
+              key={`mood-${mood}-${coachPulse}`}
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ type: 'spring', stiffness: 400, damping: 12 }}
+              className={`flex items-center gap-2.5 rounded-xl border px-3 py-2.5 ${MOOD_COACH_STYLE[mood].border} bg-gradient-to-r ${MOOD_COACH_STYLE[mood].bg} to-transparent`}
+            >
+              <moodCfg.Icon className={`w-5 h-5 shrink-0 ${moodCfg.color}`} />
+              <div className="flex-1 min-w-0">
+                <div className={`text-sm font-semibold ${moodCfg.color}`}>{moodCfg.label}</div>
+                {expressionMood && (
+                  <div className="text-[10px] text-[#4b6b50] truncate">Face: {expressionMood}</div>
+                )}
+                {overrideMood && (
+                  <div className="text-[10px] text-[#4b6b50]">Manual override</div>
+                )}
               </div>
             </motion.div>
 
-            {/* Live Signals */}
-            <div className="rounded-2xl border border-[#d1e0d3] bg-white p-5 shadow-sm">
-              <div className="text-xs uppercase tracking-wider text-[#4b6b50] mb-3">Live Signals</div>
-              <div className="grid grid-cols-2 gap-3 text-xs">
-                <div className="rounded-xl bg-[#f4f7f4] px-3 py-2">
-                  <div className="text-[#4b6b50]/70">Accuracy</div>
-                  <div className="text-sm text-[#1a2e1c] font-semibold">{accuracyPct}%</div>
+            {/* Live signal mini-stats */}
+            <div className="grid grid-cols-2 gap-1.5 mt-2">
+              <div className="rounded-lg bg-[#f4f7f4] px-2 py-1.5">
+                <div className="text-[10px] text-[#4b6b50]/70">Accuracy</div>
+                <div className="text-xs font-semibold text-[#1a2e1c]">{accuracyPct}%</div>
+              </div>
+              <motion.div
+                className="rounded-lg bg-[#f4f7f4] px-2 py-1.5"
+                animate={{ scale: wrongStreak >= 3 ? [1, 1.08, 1] : 1 }}
+                transition={{ duration: 0.3, repeat: wrongStreak >= 3 ? Infinity : 0 }}
+              >
+                <div className="text-[10px] text-[#4b6b50]/70">Streak</div>
+                <div className={`text-xs font-semibold ${wrongStreak >= 3 ? 'text-red-500' : 'text-[#1a2e1c]'}`}>
+                  {wrongStreak > 0 ? `${wrongStreak} wrong` : '—'}
                 </div>
-                <motion.div
-                  className="rounded-xl bg-[#f4f7f4] px-3 py-2"
-                  animate={{ scale: wrongStreak >= 3 ? [1, 1.1, 1] : 1 }}
-                  transition={{ duration: 0.3, repeat: wrongStreak >= 3 ? Infinity : 0 }}
-                >
-                  <div className="text-[#4b6b50]/70">Wrong streak</div>
-                  <div className={`text-sm font-bold ${wrongStreak >= 3 ? 'text-red-500' : 'text-[#1a2e1c]'}`}>
-                    {wrongStreak}{wrongStreak >= 3 ? ' → Easier!' : ''}
-                  </div>
-                </motion.div>
-                <div className="rounded-xl bg-[#f4f7f4] px-3 py-2">
-                  <div className="text-[#4b6b50]/70">Typing speed</div>
-                  <div className="text-sm text-[#1a2e1c] font-semibold">{keystrokeSignals.typing_speed_cps} cps</div>
-                </div>
-                <div className="rounded-xl bg-[#f4f7f4] px-3 py-2">
-                  <div className="text-[#4b6b50]/70">Pauses</div>
-                  <div className="text-sm text-[#1a2e1c] font-semibold">{keystrokeSignals.pause_count}</div>
-                </div>
+              </motion.div>
+              <div className="rounded-lg bg-[#f4f7f4] px-2 py-1.5">
+                <div className="text-[10px] text-[#4b6b50]/70">Speed</div>
+                <div className="text-xs font-semibold text-[#1a2e1c]">{keystrokeSignals.typing_speed_cps} cps</div>
+              </div>
+              <div className="rounded-lg bg-[#f4f7f4] px-2 py-1.5">
+                <div className="text-[10px] text-[#4b6b50]/70">Pauses</div>
+                <div className="text-xs font-semibold text-[#1a2e1c]">{keystrokeSignals.pause_count}</div>
               </div>
             </div>
-          </aside>
-        </div>
-      </main>
+          </div>
 
+          {/* AI Coach */}
+          <div className="flex-1 p-3">
+            <span className="text-[10px] uppercase tracking-wider text-[#4b6b50] font-medium block mb-2">AI Coach</span>
+            <motion.div
+              key={`coach-${coachPulse}`}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, type: 'spring', stiffness: 300, damping: 20 }}
+              className={`rounded-2xl border ${MOOD_COACH_STYLE[mood].border} bg-gradient-to-br ${MOOD_COACH_STYLE[mood].bg} to-transparent p-3 shadow-sm`}
+            >
+              <motion.p
+                key={intervention?.coachMessage}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.3 }}
+                className="text-xs text-[#4b6b50] leading-relaxed"
+              >
+                {intervention?.coachMessage || 'Stay focused. Your next step is coming.'}
+              </motion.p>
+              <div className="flex flex-wrap gap-1 mt-2.5">
+                <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                  intervention?.difficultyAdjustment === 'easier'
+                    ? 'bg-amber-100 text-amber-700'
+                    : intervention?.difficultyAdjustment === 'harder'
+                    ? 'bg-green-100 text-green-700'
+                    : 'bg-[#e8f0e8] text-[#4b6b50]'
+                }`}>
+                  {intervention?.difficultyAdjustment ?? 'same'}
+                </span>
+                <span className="rounded-full bg-[#e8f0e8] px-2 py-0.5 text-[10px] text-[#4b6b50]">
+                  {intervention?.tone ?? 'encouraging'}
+                </span>
+              </div>
+            </motion.div>
+          </div>
+
+        </aside>
+      </div>
+
+      {/* Webcam consent modal */}
       {showCamConsent && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-6">
-          <div className="w-full max-w-md rounded-2xl border border-[#d1e0d3] bg-white p-6 shadow-xl">
-            <h3 className="text-lg font-semibold text-[#1a2e1c] mb-2">Enable webcam mood badge?</h3>
-            <p className="text-sm text-[#4b6b50] mb-6">
-              We use the camera in-browser to estimate facial expressions. Nothing is uploaded.
+          <div className="w-full max-w-sm rounded-2xl border border-[#d1e0d3] bg-white p-6 shadow-xl">
+            <h3 className="text-base font-semibold text-[#1a2e1c] mb-1.5">Enable webcam?</h3>
+            <p className="text-sm text-[#4b6b50] mb-5">
+              We use the camera locally to estimate your facial expressions. Nothing is uploaded or stored.
             </p>
-            <div className="flex justify-end gap-3">
+            <div className="flex justify-end gap-2">
               <button
                 onClick={() => setShowCamConsent(false)}
                 className="rounded-xl border border-[#d1e0d3] bg-[#f4f7f4] px-4 py-2 text-sm text-[#4b6b50] hover:bg-[#e8f0e8]"
@@ -919,7 +926,7 @@ export default function SessionView({ session, onEnd }: Props) {
                 onClick={() => { setShowCamConsent(false); startCamera(); }}
                 className="rounded-xl bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-500"
               >
-                Allow webcam
+                Allow
               </button>
             </div>
           </div>
@@ -927,5 +934,4 @@ export default function SessionView({ session, onEnd }: Props) {
       )}
     </div>
   );
-
 }
