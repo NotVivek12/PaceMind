@@ -1,0 +1,157 @@
+PACEMIND — HACKATHON UPDATE NOTES
+Branch: frontend-custom
+Base: origin/main
+==================================================
+
+WHAT CHANGED SINCE THE ORIGINAL SUBMISSION
+-------------------------------------------
+
+1. ROUTING — PROPER NEXT.JS PAGES
+   Previously all navigation was state-based inside a single page.tsx
+   (screen state: 'home' | 'onboarding' | 'session'). The browser URL
+   never changed and the back button did nothing.
+
+   Now:
+     /          → Landing page (homepage only)
+     /learn     → Subject picker + diagnostic quiz flow
+     /session   → Active learning session
+
+   Session data is passed between /learn and /session via sessionStorage.
+   If someone navigates directly to /session with no data they are
+   redirected to /learn automatically. Browser back button works naturally.
+
+2. SESSION UI — FULL VIEWPORT, NO SCROLL
+   The session page (/session) now fills exactly one viewport height.
+   Nothing requires scrolling. Layout is a fixed two-column split:
+
+   LEFT (flex-1, internal scroll if needed):
+     - Concept card (name + difficulty dots)
+     - Question card with countdown timer bar
+     - 4 answer option buttons (A/B/C/D)
+     - Optional notes textarea
+     - Feedback message (animated, colour-coded)
+     - Difficulty adjustment banner (when wrong streak ≥ 3)
+     - Submit / Next button
+
+   RIGHT (fixed 288px sidebar):
+     - Webcam feed — prominent aspect-video frame at the top
+       (was previously a tiny thumbnail in the header)
+     - Camera status dot + Live/Off label + Enable/Stop button
+     - Mood Detection section below the feed:
+         - Current mood with SVG icon + colour
+         - Face expression label when webcam is active
+         - 4 mini stat tiles: Accuracy, Streak, Typing speed, Pauses
+     - AI Coach card at the bottom of the sidebar
+
+   Header is now slim:
+     - Topic + concept counter (left)
+     - Thin progress bar (centre)
+     - Score + mood override dropdown + End Session (right)
+     - Webcam badge removed from header entirely
+
+3. REDESIGNED UI — WHITE/GREEN PALETTE
+   The entire frontend was restyled from a dark purple/violet theme to a
+   clean white and forest-green palette inspired by the reference design.
+
+   Colour tokens:
+     Background:   #ffffff
+     Surface:      #f4f7f4
+     Surface hover:#e8f0e8
+     Border:       #d1e0d3
+     Text primary: #1a2e1c
+     Text muted:   #4b6b50
+     Accent:       green-600 (#16a34a)
+
+   Applied consistently across:
+     - Landing page (hero image card, features section, CTA footer)
+     - /learn (SubjectPicker — all 6 internal steps)
+     - /session (SessionView)
+     - GeneratingSpinner
+     - ErrorBoundary
+     - NavBar
+
+4. NAVBAR — CONTEXT-AWARE
+   - On / (home): transparent over the hero image, becomes frosted white
+     on scroll (backdrop-blur + border appears after 40px)
+   - On /learn: always frosted white with border
+   - On /session: hidden entirely — session has its own slim header
+   - Logo links to /
+   - "Start Learning" CTA button always visible (links to /learn)
+   - Inner pages show "← Home" instead of anchor links
+
+5. SVG ICON LIBRARY (Icons.tsx)
+   All emojis replaced with inline SVG components. No external icon
+   dependency added. Icons included:
+
+   UI/Feature:  Brain, Document, Masks, ClipboardCheck, Zap, Telescope,
+                FolderOpen, FileText, Sparkles, AlertCircle, RefreshCw
+   Mood states: MoodFlow, MoodConfused, MoodFrustrated, MoodDisengaged
+   Domains:     DomainBiology, DomainPhysics, DomainChemistry, DomainMath,
+                DomainHistory, DomainCS, DomainGeography, DomainLiterature,
+                DomainEconomics, DomainPsychology, DomainArt, DomainMusic
+
+   DOMAIN_ICONS map connects domain IDs to their icon components so the
+   subject picker grid renders SVGs instead of emoji characters.
+
+6. BACKEND BUG FIX — /api/mood PAYLOAD MISMATCH
+   The frontend was sending a nested payload to POST /api/mood:
+     { keystroke: { typing_speed_cps, backspace_count, ... },
+       expressions: { happy, sad, angry, ... },
+       override_mood: string }
+
+   The backend MoodRequest model expected flat fields with different names
+   (typing_speed_wpm, face_expression, override). This was a pre-existing
+   bug that silently dropped all mood signals.
+
+   Fix applied in:
+     backend/app/models/mood.py   — MoodRequest now accepts both the
+                                    nested frontend shape AND the old flat
+                                    fields (backward compatible)
+     backend/app/routers/mood.py  — classify_mood() translates the nested
+                                    keystroke object (cps → wpm, derives
+                                    backspace_rate and error_rate_pct),
+                                    picks dominant face expression from the
+                                    full scores object, and capitalises the
+                                    returned mood string to match the
+                                    frontend MoodState type
+                                    (Flow/Confused/Frustrated/Disengaged)
+
+7. SHARED SESSION TYPE
+   SessionData type moved from app/page.tsx (caused circular imports) to
+   src/types/session.ts and imported cleanly by both SubjectPicker and
+   SessionView.
+
+8. GIT BRANCH STRATEGY
+   All frontend changes live on branch: frontend-custom
+   The main branch (backend) is untouched.
+   sync-backend.sh added at repo root — run it to rebase frontend-custom
+   onto any new backend commits from main:
+     bash sync-backend.sh
+
+==================================================
+FILES CHANGED (summary)
+==================================================
+
+Frontend (new files):
+  frontend/src/app/learn/page.tsx        — /learn route wrapper
+  frontend/src/app/session/page.tsx      — /session route wrapper
+  frontend/src/components/Icons.tsx      — SVG icon library
+  frontend/src/types/session.ts          — shared SessionData type
+  frontend/public/pacemindbg.jpg         — hero background image
+
+Frontend (modified):
+  frontend/src/app/page.tsx              — home-only, uses router.push
+  frontend/src/app/globals.css           — white/green CSS variables
+  frontend/src/app/layout.tsx            — bg-white body
+  frontend/src/components/NavBar.tsx     — context-aware, scroll-triggered
+  frontend/src/components/SubjectPicker.tsx — green palette + SVG icons
+  frontend/src/components/SessionView.tsx   — full-viewport 2-col layout
+  frontend/src/components/GeneratingSpinner.tsx — green palette + SVG
+  frontend/src/components/ErrorBoundary.tsx     — green palette + SVG
+
+Backend (modified):
+  backend/app/models/mood.py             — MoodRequest accepts nested shape
+  backend/app/routers/mood.py            — payload translation + mood fix
+
+Repo:
+  sync-backend.sh                        — helper: rebase frontend on main
