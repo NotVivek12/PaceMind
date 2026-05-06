@@ -93,23 +93,61 @@ async def infer_mood(signals: dict):
 
 @router.post("/mood")
 async def classify_mood(payload: MoodRequest):
-    # Demo override — always check this first
-    if payload.override:
-        return {"mood": payload.override, "confidence": 1.0}
+    # ── Override check (both field names) ────────────────────────────────
+    override = payload.override_mood or payload.override
+    if override:
+        return {"mood": override, "confidence": 1.0, "source": "override", "dominant_expression": None}
 
-    # Build signal dict from whatever fields arrived
-    signals = {
-        "typing_speed_wpm":     payload.typing_speed_wpm,
-        "error_rate_pct":       payload.error_rate_pct,
-        "backspace_rate":       payload.backspace_rate,
-        "pause_seconds":        payload.pause_seconds,
-        "face_expression":      payload.face_expression,
-        "face_confidence":      payload.face_confidence,
-        "response_time_ms":     payload.response_time_ms,
-        "recent_wrong_answers": payload.recent_wrong_answers,
-    }
-    # Remove None values
-    signals = {k: v for k, v in signals.items() if v is not None}
+    # ── Build flat signal dict from whichever shape arrived ───────────────
+    signals: dict = {}
+
+    if payload.keystroke:
+        # Frontend nested shape: translate cps → wpm (approx ×12), derive rates
+        ks = payload.keystroke
+        elapsed_s = max(1, ks.elapsed_ms / 1000)
+        signals["typing_speed_wpm"] = round((ks.typing_speed_cps * 60) / 5, 1)  # chars/s → wpm
+        signals["backspace_rate"] = round(ks.backspace_count / max(1, ks.input_events), 3)
+        signals["pause_seconds"] = ks.pause_count * 2.0  # each pause ≈ 2s threshold
+        signals["error_rate_pct"] = round((ks.backspace_count / max(1, ks.input_events)) * 100, 1)
+    else:
+        # Legacy flat fields
+        for k in ("typing_speed_wpm", "error_rate_pct", "backspace_rate",
+                  "pause_seconds", "response_time_ms", "recent_wrong_answers"):
+            v = getattr(payload, k, None)
+            if v is not None:
+                signals[k] = v
+
+    if payload.expressions:
+        # Pick dominant expression from face-api.js scores
+        expr = payload.expressions
+        scores = {
+            "happy":     expr.happy,
+            "sad":       expr.sad,
+            "angry":     expr.angry,
+            "fearful":   expr.fearful,
+            "disgusted": expr.disgusted,
+            "surprised": expr.surprised,
+            "neutral":   expr.neutral,
+        }
+        dominant = max(scores, key=scores.get)
+        conf = scores[dominant]
+        if conf >= 0.2:
+            signals["face_expression"] = dominant
+            signals["face_confidence"] = conf
+    elif payload.face_expression:
+        signals["face_expression"] = payload.face_expression
+        signals["face_confidence"] = payload.face_confidence or 0.5
 
     mood, confidence = await infer_mood(signals)
-    return {"mood": mood, "confidence": confidence}
+
+    # Capitalise to match frontend MoodState type
+    mood_map = {"flow": "Flow", "confused": "Confused",
+                "frustrated": "Frustrated", "disengaged": "Disengaged"}
+    mood = mood_map.get(mood, "Flow")
+
+    return {
+        "mood": mood,
+        "confidence": confidence,
+        "source": "aggregate",
+        "dominant_expression": signals.get("face_expression"),
+    }

@@ -27,22 +27,19 @@ class FaceExpressionScores(BaseModel):
     surprised: float = 0.0
 
 class MoodRequest(BaseModel):
-    # Keystroke dynamics
-    typing_speed_wpm:  Optional[float] = None
-    error_rate_pct:    Optional[float] = None
-    backspace_rate:    Optional[float] = None
-    pause_seconds:     Optional[float] = None
+    # Nested shape sent by the frontend
+    keystroke: Optional[KeystrokeSignals] = None
+    expressions: Optional[FaceExpressionScores] = None
+    override_mood: Optional[str] = None  # frontend field name
 
-    # Webcam / face-api.js
-    face_expression:   Optional[str]   = None
-    face_confidence:   Optional[float] = None
-
-    # Response timing
-    response_time_ms:  Optional[float] = None
-
-    # General
-    recent_wrong_answers: Optional[int] = None
-    session_id:        Optional[str]   = None
-
-    # Demo override — bypasses inference entirely
-    override:          Optional[str]   = None
+    # Legacy flat fields (kept for backward compat with any direct API callers)
+    typing_speed_wpm:     Optional[float] = None
+    error_rate_pct:       Optional[float] = None
+    backspace_rate:       Optional[float] = None
+    pause_seconds:        Optional[float] = None
+    face_expression:      Optional[str]   = None
+    face_confidence:      Optional[float] = None
+    response_time_ms:     Optional[float] = None
+    recent_wrong_answers: Optional[int]   = None
+    session_id:           Optional[str]   = None
+    override:             Optional[str]   = None  # legacy override field
