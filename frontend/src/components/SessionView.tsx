@@ -3,7 +3,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { evaluateMoodSignals, evaluateSession, getNextQuestion, gradeAnswer, getIntervention } from '@/lib/api';
-import type { SessionData } from '@/app/page';
+import { MoodFlow, MoodConfused, MoodFrustrated, MoodDisengaged, RefreshCw } from '@/components/Icons';
+import type { SessionData } from '@/types/session';
 import type { MoodState, Concept, Intervention, FaceExpressionScores, KeystrokeSignals } from '@/types';
 
 interface Props {
@@ -11,18 +12,18 @@ interface Props {
   onEnd: () => void;
 }
 
-const MOOD_CONFIG: Record<MoodState, { emoji: string; label: string; color: string }> = {
-  Flow:       { emoji: '⚡', label: 'Flow',       color: 'text-emerald-400' },
-  Confused:   { emoji: '😕', label: 'Confused',   color: 'text-yellow-400' },
-  Frustrated: { emoji: '😤', label: 'Frustrated', color: 'text-orange-400' },
-  Disengaged: { emoji: '😴', label: 'Disengaged', color: 'text-red-400' },
+const MOOD_CONFIG: Record<MoodState, { Icon: React.ComponentType<{ className?: string }>; label: string; color: string; dotColor: string }> = {
+  Flow:       { Icon: MoodFlow,       label: 'Flow',       color: 'text-emerald-500', dotColor: '#10b981' },
+  Confused:   { Icon: MoodConfused,   label: 'Confused',   color: 'text-yellow-500',  dotColor: '#eab308' },
+  Frustrated: { Icon: MoodFrustrated, label: 'Frustrated', color: 'text-orange-500',  dotColor: '#f97316' },
+  Disengaged: { Icon: MoodDisengaged, label: 'Disengaged', color: 'text-red-400',     dotColor: '#f87171' },
 };
 
-const MOOD_COACH_STYLE: Record<MoodState, { border: string; bg: string; glow: string; icon: string }> = {
-  Flow:       { border: 'border-emerald-500/40', bg: 'from-emerald-500/15', glow: 'shadow-emerald-500/20', icon: '🟢' },
-  Confused:   { border: 'border-yellow-500/40',  bg: 'from-yellow-500/15',  glow: 'shadow-yellow-500/20',  icon: '🟡' },
-  Frustrated: { border: 'border-red-500/40',     bg: 'from-red-500/15',     glow: 'shadow-red-500/20',     icon: '🔴' },
-  Disengaged: { border: 'border-gray-500/40',    bg: 'from-gray-500/15',    glow: 'shadow-gray-500/20',    icon: '⚫' },
+const MOOD_COACH_STYLE: Record<MoodState, { border: string; bg: string; glow: string }> = {
+  Flow:       { border: 'border-emerald-300', bg: 'from-emerald-50',  glow: 'shadow-emerald-100' },
+  Confused:   { border: 'border-yellow-300',  bg: 'from-yellow-50',   glow: 'shadow-yellow-100'  },
+  Frustrated: { border: 'border-orange-300',  bg: 'from-orange-50',   glow: 'shadow-orange-100'  },
+  Disengaged: { border: 'border-gray-300',    bg: 'from-gray-50',     glow: 'shadow-gray-100'    },
 };
 
 export default function SessionView({ session, onEnd }: Props) {
@@ -550,12 +551,12 @@ export default function SessionView({ session, onEnd }: Props) {
   const accuracyPct = total > 0 ? Math.round((correct / total) * 100) : 0;
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col bg-white">
       {/* Header */}
-      <header className="sticky top-0 z-10 border-b border-white/10 bg-[#0a0a0f]/80 backdrop-blur px-6 py-3 flex items-center justify-between">
+      <header className="sticky top-0 z-10 border-b border-[#d1e0d3] bg-white/95 backdrop-blur px-6 py-3 flex items-center justify-between">
         <div>
-          <span className="text-sm text-white/40">Studying: </span>
-          <span className="text-sm font-medium text-white">{session.topic}</span>
+          <span className="text-sm text-[#4b6b50]">Studying: </span>
+          <span className="text-sm font-medium text-[#1a2e1c]">{session.topic}</span>
         </div>
         <div className="flex items-center gap-4">
           {/* Mood badge - animated pulse on change */}
@@ -575,25 +576,21 @@ export default function SessionView({ session, onEnd }: Props) {
               {moodCfg.emoji}
             </motion.span>
             <span>{moodCfg.label}</span>
-            {overrideMood && <span className="text-xs text-white/40">Manual</span>}
+            {overrideMood && <span className="text-xs text-[#4b6b50]">Manual</span>}
           </motion.div>
 
           {/* Webcam badge */}
-          <div className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/60">
+          <div className="flex items-center gap-2 rounded-full border border-[#d1e0d3] bg-[#f4f7f4] px-3 py-1 text-xs text-[#4b6b50]">
             <span
               className={`h-2 w-2 rounded-full ${
-                cameraState === 'active'
-                  ? 'bg-emerald-400'
-                  : cameraState === 'requesting'
-                    ? 'bg-yellow-400'
-                    : cameraState === 'denied'
-                      ? 'bg-red-400'
-                      : cameraState === 'error'
-                        ? 'bg-red-400'
-                        : 'bg-white/20'
+                cameraState === 'active' ? 'bg-green-500'
+                  : cameraState === 'requesting' ? 'bg-yellow-400'
+                  : cameraState === 'denied' ? 'bg-red-400'
+                  : cameraState === 'error' ? 'bg-red-400'
+                  : 'bg-[#d1e0d3]'
               }`}
             />
-            <div className="h-5 w-8 overflow-hidden rounded bg-black/30">
+            <div className="h-5 w-8 overflow-hidden rounded bg-black/10">
               <video
                 ref={videoRef}
                 muted
@@ -604,23 +601,19 @@ export default function SessionView({ session, onEnd }: Props) {
             <span>
               Webcam {cameraState === 'active' ? 'On' : cameraState === 'requesting' ? 'Starting' : cameraState === 'error' ? 'Error' : 'Off'}
             </span>
-            {expressionMood && <span className="text-white/80">({expressionMood})</span>}
+            {expressionMood && <span className="text-[#1a2e1c]">({expressionMood})</span>}
             <button
               onClick={() => {
-                if (cameraState === 'active') {
-                  stopCamera();
-                } else {
-                  setShowCamConsent(true);
-                }
+                if (cameraState === 'active') { stopCamera(); } else { setShowCamConsent(true); }
               }}
-              className="ml-1 rounded-full border border-white/10 bg-white/10 px-2 py-0.5 text-[10px] text-white/70 hover:bg-white/20"
+              className="ml-1 rounded-full border border-[#d1e0d3] bg-white px-2 py-0.5 text-[10px] text-[#4b6b50] hover:bg-[#e8f0e8]"
             >
               {cameraState === 'active' ? 'Stop' : 'Enable'}
             </button>
           </div>
 
           {/* Manual override */}
-          <div className="flex items-center gap-2 text-xs text-white/60">
+          <div className="flex items-center gap-2 text-xs text-[#4b6b50]">
             <span>Override</span>
             <select
               value={overrideMood ?? 'Auto'}
@@ -628,7 +621,7 @@ export default function SessionView({ session, onEnd }: Props) {
                 const value = event.target.value as MoodState | 'Auto';
                 setOverrideMood(value === 'Auto' ? null : value);
               }}
-              className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-xs text-white/80 outline-none"
+              className="rounded-lg border border-[#d1e0d3] bg-white px-2 py-1 text-xs text-[#1a2e1c] outline-none"
             >
               <option value="Auto">Auto</option>
               <option value="Flow">Flow</option>
@@ -638,12 +631,11 @@ export default function SessionView({ session, onEnd }: Props) {
             </select>
           </div>
 
-          {/* Score */}
-          <span className="text-sm text-white/40">{correct}/{total} correct</span>
+          <span className="text-sm text-[#4b6b50]">{correct}/{total} correct</span>
           <button
             id="end-session-btn"
             onClick={onEnd}
-            className="text-sm text-white/30 hover:text-white/70 transition-colors"
+            className="text-sm text-[#4b6b50] hover:text-[#1a2e1c] transition-colors"
           >
             End Session
           </button>
@@ -651,59 +643,59 @@ export default function SessionView({ session, onEnd }: Props) {
       </header>
 
       {/* Progress bar */}
-      <div className="h-1 bg-white/5">
+      <div className="h-1 bg-[#d1e0d3]">
         <div
-          className="h-full bg-gradient-to-r from-purple-600 to-purple-400 transition-all duration-500"
+          className="h-full bg-gradient-to-r from-green-600 to-green-400 transition-all duration-500"
           style={{ width: `${progress}%` }}
         />
       </div>
 
       {/* Main content */}
-      <main className="flex-1 px-6 py-12">
+      <main className="flex-1 px-6 py-10 bg-[#f4f7f4]">
         <div className="mx-auto w-full max-w-5xl grid gap-6 lg:grid-cols-[1.3fr,0.7fr]">
-          <section className="space-y-6">
+          <section className="space-y-5">
             {currentConcept && (
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                <span className="text-xs text-white/40 uppercase tracking-wider">Concept {conceptIndex + 1} of {session.concepts.length}</span>
-                <h2 className="text-xl font-semibold text-white mt-1">{currentConcept.concept}</h2>
+              <div className="rounded-2xl border border-[#d1e0d3] bg-white p-4 shadow-sm">
+                <span className="text-xs text-[#4b6b50] uppercase tracking-wider">Concept {conceptIndex + 1} of {session.concepts.length}</span>
+                <h2 className="text-xl font-semibold text-[#1a2e1c] mt-1">{currentConcept.concept}</h2>
                 <div className="flex items-center gap-3 mt-3">
                   <div className="flex gap-1">
                     {Array.from({ length: currentConcept.difficulty }).map((_, i) => (
-                      <span key={i} className="w-2 h-2 rounded-full bg-purple-500" />
+                      <span key={i} className="w-2 h-2 rounded-full bg-green-500" />
                     ))}
                     {Array.from({ length: Math.max(0, 5 - currentConcept.difficulty) }).map((_, i) => (
-                      <span key={i} className="w-2 h-2 rounded-full bg-white/10" />
+                      <span key={i} className="w-2 h-2 rounded-full bg-[#d1e0d3]" />
                     ))}
                   </div>
-                  <span className="text-xs text-white/50">Difficulty {currentConcept.difficulty}/5</span>
+                  <span className="text-xs text-[#4b6b50]">Difficulty {currentConcept.difficulty}/5</span>
                 </div>
               </div>
             )}
 
             {loading ? (
               <div className="flex flex-col items-center gap-4 py-20">
-                <div className="w-10 h-10 rounded-full border-4 border-purple-500 border-t-transparent animate-spin" />
-                <p className="text-white/40">Generating question...</p>
+                <div className="w-10 h-10 rounded-full border-4 border-green-500 border-t-transparent animate-spin" />
+                <p className="text-[#4b6b50]">Generating question...</p>
               </div>
             ) : (
               <>
-                <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
+                <div className="rounded-2xl border border-[#d1e0d3] bg-white p-6 shadow-sm">
                   <div className="flex items-center justify-between mb-4">
-                    <span className="text-xs uppercase tracking-wider text-white/40">Question</span>
-                    <div className="flex items-center gap-2 text-xs text-white/60">
-                      <div className="h-2 w-24 rounded-full bg-white/10 overflow-hidden">
+                    <span className="text-xs uppercase tracking-wider text-[#4b6b50]">Question</span>
+                    <div className="flex items-center gap-2 text-xs text-[#4b6b50]">
+                      <div className="h-2 w-24 rounded-full bg-[#d1e0d3] overflow-hidden">
                         <div
-                          className={`h-full ${timePct <= 25 ? 'bg-red-400' : 'bg-emerald-400'}`}
+                          className={`h-full ${timePct <= 25 ? 'bg-red-400' : 'bg-green-500'}`}
                           style={{ width: `${timePct}%` }}
                         />
                       </div>
                       <span>{timeLeft}s</span>
                     </div>
                   </div>
-                  <p className="text-white text-lg leading-relaxed">{currentQuestion}</p>
+                  <p className="text-[#1a2e1c] text-lg leading-relaxed">{currentQuestion}</p>
                 </div>
 
-                <div className="grid gap-3">
+                <div className="grid gap-2">
                   {options.map((option, index) => {
                     const selected = selectedOptionIndex === index;
                     const revealCorrect = showFeedback && typeof correctIndex === 'number';
@@ -716,21 +708,19 @@ export default function SessionView({ session, onEnd }: Props) {
                         disabled={showFeedback}
                         className={`w-full rounded-xl border px-4 py-3 text-left transition-all ${
                           selected
-                            ? 'border-purple-400/70 bg-purple-500/20'
-                            : 'border-white/10 bg-white/5 hover:border-white/30'
+                            ? 'border-green-500 bg-green-50'
+                            : 'border-[#d1e0d3] bg-white hover:border-green-400 hover:bg-[#f4f7f4]'
                         } ${
-                          isCorrectChoice
-                            ? 'border-emerald-400/70 bg-emerald-500/10'
-                            : isWrongChoice
-                              ? 'border-orange-400/70 bg-orange-500/10'
-                              : ''
+                          isCorrectChoice ? 'border-green-500 bg-green-50'
+                            : isWrongChoice ? 'border-red-300 bg-red-50'
+                            : ''
                         }`}
                       >
                         <div className="flex items-center gap-3">
-                          <span className="h-8 w-8 rounded-full bg-white/10 text-sm text-white/70 flex items-center justify-center">
+                          <span className="h-8 w-8 rounded-full bg-[#e8f0e8] text-sm text-[#4b6b50] flex items-center justify-center font-medium">
                             {String.fromCharCode(65 + index)}
                           </span>
-                          <span className="text-sm text-white/80">{option}</span>
+                          <span className="text-sm text-[#1a2e1c]">{option}</span>
                         </div>
                       </button>
                     );
@@ -745,7 +735,7 @@ export default function SessionView({ session, onEnd }: Props) {
                   disabled={showFeedback}
                   placeholder="Optional: jot quick notes or reasoning..."
                   rows={3}
-                  className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder-white/30 outline-none focus:border-purple-500/60 transition-colors resize-none disabled:opacity-50"
+                  className="w-full rounded-xl border border-[#d1e0d3] bg-white px-4 py-3 text-[#1a2e1c] placeholder-[#4b6b50]/50 outline-none focus:border-green-500 transition-colors resize-none disabled:opacity-50 text-sm"
                 />
 
                 {showFeedback && (
@@ -753,20 +743,20 @@ export default function SessionView({ session, onEnd }: Props) {
                     initial={{ opacity: 0, y: 8, scale: 0.95 }}
                     animate={wrongStreak >= 3 ? "frustrated" : { opacity: 1, y: 0, scale: 1 }}
                     transition={{ type: "spring", stiffness: 400 }}
-                    className={`w-full rounded-xl border px-5 py-4 text-sm shadow-lg ${
-                       isCorrect
-                         ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300 drop-shadow-emerald-500/50'
-                         : wrongStreak >= 3
-                         ? 'border-red-500/40 bg-red-500/10 text-red-300 drop-shadow-red-500/50 animate-pulse'
-                         : 'border-orange-500/30 bg-orange-500/10 text-orange-300 drop-shadow-orange-500/50'
-                      }`}
+                    className={`w-full rounded-xl border px-5 py-4 text-sm shadow-sm ${
+                      isCorrect
+                        ? 'border-green-300 bg-green-50 text-green-700'
+                        : wrongStreak >= 3
+                        ? 'border-red-300 bg-red-50 text-red-600 animate-pulse'
+                        : 'border-orange-200 bg-orange-50 text-orange-600'
+                    }`}
                     variants={{
                       frustrated: { x: [-10, 10, -5, 5, 0], opacity: 1, y: 0, scale: 1, transition: { duration: 0.5 } }
                     }}
                   >
-                    <div className="flex items-center gap-2 mb-2">
+                    <div className="flex items-center gap-2 mb-1">
                       <span className="font-semibold text-base">{isCorrect ? 'Correct!' : 'Keep trying!'}</span>
-                      <span className={`font-semibold ml-auto ${moodCfg.color}`}>Mood: {moodCfg.emoji} {moodCfg.label}</span>
+                      <span className={`font-semibold ml-auto ${moodCfg.color}`}>{moodCfg.emoji} {moodCfg.label}</span>
                     </div>
                     {feedbackText && <p className="leading-relaxed opacity-90">{feedbackText}</p>}
                   </motion.div>
@@ -777,31 +767,29 @@ export default function SessionView({ session, onEnd }: Props) {
                     id="submit-answer-btn"
                     onClick={handleSubmit}
                     disabled={selectedOptionIndex === null || isGrading}
-                    className="w-full py-4 rounded-2xl bg-purple-600 hover:bg-purple-500 disabled:opacity-30 disabled:cursor-not-allowed text-white font-semibold transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] flex justify-center items-center gap-2"
+                    className="w-full py-4 rounded-2xl bg-green-600 hover:bg-green-500 disabled:opacity-30 disabled:cursor-not-allowed text-white font-semibold transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] flex justify-center items-center gap-2 shadow-md shadow-green-200"
                   >
                     {isGrading ? (
                       <>
-                        <div className="w-5 h-5 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                        <div className="w-5 h-5 rounded-full border-2 border-white/40 border-t-white animate-spin" />
                         Grading...
                       </>
-                    ) : (
-                      'Submit Answer'
-                    )}
+                    ) : 'Submit Answer'}
                   </button>
                 ) : (
                   <button
                     id="next-question-btn"
                     onClick={handleNext}
-                    className={`w-full py-4 rounded-2xl text-white font-semibold transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] ${
+                    className={`w-full py-4 rounded-2xl text-white font-semibold transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] shadow-md ${
                       isCorrect && conceptCorrectStreak >= 1
-                        ? 'bg-emerald-600 hover:bg-emerald-500 shadow-lg shadow-emerald-500/25'
-                        : 'bg-purple-600 hover:bg-purple-500'
+                        ? 'bg-green-600 hover:bg-green-500 shadow-green-200'
+                        : 'bg-[#1a2e1c] hover:bg-[#2d4a30] shadow-gray-200'
                     }`}
                   >
                     {conceptIndex + 1 >= session.concepts.length && isCorrect && conceptCorrectStreak >= 2
                       ? 'Complete Session'
                       : isCorrect && conceptCorrectStreak >= 2
-                      ? `✓ Mastered! Next Concept →`
+                      ? '✓ Mastered! Next Concept →'
                       : isCorrect
                       ? 'Next Question (same concept)'
                       : wrongStreak >= 3
@@ -815,48 +803,38 @@ export default function SessionView({ session, onEnd }: Props) {
           </section>
 
           <aside className="space-y-4">
-            {/* Difficulty Adjustment Banner */}
             {difficultyBanner && (
               <motion.div
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
                 exit={{ opacity: 0, height: 0 }}
-                className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-300 flex items-center gap-2"
+                className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700 flex items-center gap-2"
               >
-                <motion.span
-                  animate={{ rotate: [0, 360] }}
-                  transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-                >
-                  🔄
-                </motion.span>
+                <motion.span animate={{ rotate: [0, 360] }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}>🔄</motion.span>
                 <span className="font-medium">Difficulty adjusted</span>
-                <span className="text-amber-400/70">— serving an easier question</span>
+                <span className="text-amber-600/70">— serving an easier question</span>
               </motion.div>
             )}
 
-            {/* Mood-Colored Coach Card */}
+            {/* Coach Card */}
             <motion.div
               key={`coach-${coachPulse}`}
               initial={{ opacity: 0, y: 20, scale: 0.9 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -10, scale: 0.95 }}
               transition={{ duration: 0.5, type: "spring", stiffness: 300, damping: 15 }}
-              className={`rounded-2xl border-2 ${MOOD_COACH_STYLE[mood].border} bg-gradient-to-br ${MOOD_COACH_STYLE[mood].bg} via-transparent to-transparent p-5 shadow-2xl ${MOOD_COACH_STYLE[mood].glow} transition-colors duration-500`}
+              className={`rounded-2xl border-2 ${MOOD_COACH_STYLE[mood].border} bg-gradient-to-br ${MOOD_COACH_STYLE[mood].bg} via-transparent to-transparent p-5 shadow-md ${MOOD_COACH_STYLE[mood].glow} transition-colors duration-500`}
               whileHover={{ scale: 1.02, y: -2 }}
             >
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
-                  <motion.span
-                    className="text-lg"
-                    animate={{ scale: [1, 1.3, 1] }}
-                    transition={{ duration: 0.6, repeat: 2 }}
-                  >
+                  <motion.span className="text-lg" animate={{ scale: [1, 1.3, 1] }} transition={{ duration: 0.6, repeat: 2 }}>
                     {MOOD_COACH_STYLE[mood].icon}
                   </motion.span>
-                  <span className="text-sm font-semibold text-white/90">AI Coach</span>
+                  <span className="text-sm font-semibold text-[#1a2e1c]">AI Coach</span>
                 </div>
                 <motion.span
-                  className={`text-xs font-bold px-2 py-0.5 rounded-full ${moodCfg.color} bg-white/5`}
+                  className={`text-xs font-bold px-2 py-0.5 rounded-full ${moodCfg.color} bg-white/60`}
                   animate={{ scale: [1, 1.1, 1] }}
                   transition={{ duration: 0.4 }}
                 >
@@ -868,53 +846,54 @@ export default function SessionView({ session, onEnd }: Props) {
                 initial={{ opacity: 0, x: -10 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.3 }}
-                className="text-sm text-white/80 leading-relaxed"
+                className="text-sm text-[#4b6b50] leading-relaxed"
               >
                 {intervention?.coachMessage || 'Stay focused and keep experimenting. Your next step is coming.'}
               </motion.p>
               <div className="flex flex-wrap gap-2 mt-4">
                 <span className={`rounded-full px-3 py-1 text-xs font-medium ${
                   intervention?.difficultyAdjustment === 'easier'
-                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                    ? 'bg-amber-100 text-amber-700 border border-amber-200'
                     : intervention?.difficultyAdjustment === 'harder'
-                    ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
-                    : 'bg-white/10 text-white/70'
+                    ? 'bg-green-100 text-green-700 border border-green-200'
+                    : 'bg-[#e8f0e8] text-[#4b6b50]'
                 }`}>
                   Difficulty: {intervention?.difficultyAdjustment ?? 'same'}
                 </span>
-                <span className="rounded-full bg-white/10 px-3 py-1 text-xs text-white/70">
+                <span className="rounded-full bg-[#e8f0e8] px-3 py-1 text-xs text-[#4b6b50]">
                   Tone: {intervention?.tone ?? 'encouraging'}
                 </span>
-                <span className="rounded-full bg-white/10 px-3 py-1 text-xs text-white/70">
+                <span className="rounded-full bg-[#e8f0e8] px-3 py-1 text-xs text-[#4b6b50]">
                   Format: {intervention?.formatSwitch ?? 'text'}
                 </span>
               </div>
             </motion.div>
 
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
-              <div className="text-xs uppercase tracking-wider text-white/40 mb-3">Live Signals</div>
-              <div className="grid grid-cols-2 gap-3 text-xs text-white/70">
-                <div className="rounded-xl bg-white/5 px-3 py-2">
-                  <div className="text-white/40">Accuracy</div>
-                  <div className="text-sm text-white">{accuracyPct}%</div>
+            {/* Live Signals */}
+            <div className="rounded-2xl border border-[#d1e0d3] bg-white p-5 shadow-sm">
+              <div className="text-xs uppercase tracking-wider text-[#4b6b50] mb-3">Live Signals</div>
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                <div className="rounded-xl bg-[#f4f7f4] px-3 py-2">
+                  <div className="text-[#4b6b50]/70">Accuracy</div>
+                  <div className="text-sm text-[#1a2e1c] font-semibold">{accuracyPct}%</div>
                 </div>
-                <motion.div 
-                  className="rounded-xl bg-white/5 px-3 py-2"
+                <motion.div
+                  className="rounded-xl bg-[#f4f7f4] px-3 py-2"
                   animate={{ scale: wrongStreak >= 3 ? [1, 1.1, 1] : 1 }}
                   transition={{ duration: 0.3, repeat: wrongStreak >= 3 ? Infinity : 0 }}
                 >
-                  <div className="text-white/40">Wrong streak</div>
-                  <div className={`text-sm font-bold ${wrongStreak >= 3 ? 'text-red-400 drop-shadow-lg' : 'text-white'}`}>
-                    {wrongStreak}{wrongStreak >= 3 ? ' → Easier next!' : ''}
+                  <div className="text-[#4b6b50]/70">Wrong streak</div>
+                  <div className={`text-sm font-bold ${wrongStreak >= 3 ? 'text-red-500' : 'text-[#1a2e1c]'}`}>
+                    {wrongStreak}{wrongStreak >= 3 ? ' → Easier!' : ''}
                   </div>
                 </motion.div>
-                <div className="rounded-xl bg-white/5 px-3 py-2">
-                  <div className="text-white/40">Typing speed</div>
-                  <div className="text-sm text-white">{keystrokeSignals.typing_speed_cps} cps</div>
+                <div className="rounded-xl bg-[#f4f7f4] px-3 py-2">
+                  <div className="text-[#4b6b50]/70">Typing speed</div>
+                  <div className="text-sm text-[#1a2e1c] font-semibold">{keystrokeSignals.typing_speed_cps} cps</div>
                 </div>
-                <div className="rounded-xl bg-white/5 px-3 py-2">
-                  <div className="text-white/40">Pauses</div>
-                  <div className="text-sm text-white">{keystrokeSignals.pause_count}</div>
+                <div className="rounded-xl bg-[#f4f7f4] px-3 py-2">
+                  <div className="text-[#4b6b50]/70">Pauses</div>
+                  <div className="text-sm text-[#1a2e1c] font-semibold">{keystrokeSignals.pause_count}</div>
                 </div>
               </div>
             </div>
@@ -923,25 +902,22 @@ export default function SessionView({ session, onEnd }: Props) {
       </main>
 
       {showCamConsent && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-6">
-          <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#0f0f16] p-6">
-            <h3 className="text-lg font-semibold text-white mb-2">Enable webcam mood badge?</h3>
-            <p className="text-sm text-white/60 mb-6">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-6">
+          <div className="w-full max-w-md rounded-2xl border border-[#d1e0d3] bg-white p-6 shadow-xl">
+            <h3 className="text-lg font-semibold text-[#1a2e1c] mb-2">Enable webcam mood badge?</h3>
+            <p className="text-sm text-[#4b6b50] mb-6">
               We use the camera in-browser to estimate facial expressions. Nothing is uploaded.
             </p>
             <div className="flex justify-end gap-3">
               <button
                 onClick={() => setShowCamConsent(false)}
-                className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/70 hover:bg-white/10"
+                className="rounded-xl border border-[#d1e0d3] bg-[#f4f7f4] px-4 py-2 text-sm text-[#4b6b50] hover:bg-[#e8f0e8]"
               >
                 Not now
               </button>
               <button
-                onClick={() => {
-                  setShowCamConsent(false);
-                  startCamera();
-                }}
-                className="rounded-xl bg-purple-600 px-4 py-2 text-sm font-semibold text-white hover:bg-purple-500"
+                onClick={() => { setShowCamConsent(false); startCamera(); }}
+                className="rounded-xl bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-500"
               >
                 Allow webcam
               </button>
@@ -951,4 +927,5 @@ export default function SessionView({ session, onEnd }: Props) {
       )}
     </div>
   );
+
 }

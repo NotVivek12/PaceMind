@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { generateCurriculum, extractContent } from '@/lib/api';
-import type { SessionData } from '@/app/page';
+import type { SessionData } from '@/types/session';
 import type { Intent, StudentLevel } from '@/types';
 
 type Step = 'path' | 'topic' | 'loading';

@@ -24,7 +24,7 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" className={`${inter.variable} h-full`} suppressHydrationWarning>
-      <body className="min-h-full bg-[#0a0a0f] text-white antialiased">
+      <body className="min-h-full bg-white text-[#1a2e1c] antialiased">
         <NavBar />
         <ErrorBoundary>{children}</ErrorBoundary>
       </body>

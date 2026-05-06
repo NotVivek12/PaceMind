@@ -5,7 +5,8 @@ import { generateCurriculum, extractContent, uploadNotesFile } from '@/lib/api';
 import { DOMAINS, type Domain } from '@/lib/domain-data';
 import { getDiagnosticQuestions, computeLevel } from '@/lib/diagnostic-data';
 import GeneratingSpinner from './GeneratingSpinner';
-import type { SessionData } from '@/app/page';
+import { DOMAIN_ICONS, Brain, Document, ClipboardCheck, Zap, Telescope, FolderOpen, FileText } from '@/components/Icons';
+import type { SessionData } from '@/types/session';
 import type { Intent, DiagnosticQuestion, StudentLevel } from '@/types';
 
 type Step = 'path' | 'domain' | 'topic' | 'intent' | 'diagnostic' | 'upload' | 'loading';
@@ -15,10 +16,10 @@ interface Props {
   onBack: () => void;
 }
 
-const INTENT_OPTIONS: { value: Intent; icon: string; label: string; desc: string }[] = [
-  { value: 'exam_prep', icon: '📝', label: 'Exam Prep', desc: 'Structured march through all key concepts' },
-  { value: 'catch_up', icon: '⚡', label: 'Catch Up', desc: 'Fill knowledge gaps fast and efficiently' },
-  { value: 'curiosity', icon: '🔭', label: 'Curiosity', desc: 'Open exploration — learn what fascinates you' },
+const INTENT_OPTIONS: { value: Intent; Icon: React.ComponentType<{ className?: string }>; label: string; desc: string }[] = [
+  { value: 'exam_prep', Icon: ClipboardCheck, label: 'Exam Prep',  desc: 'Structured march through all key concepts' },
+  { value: 'catch_up',  Icon: Zap,            label: 'Catch Up',   desc: 'Fill knowledge gaps fast and efficiently' },
+  { value: 'curiosity', Icon: Telescope,      label: 'Curiosity',  desc: 'Open exploration — learn what fascinates you' },
 ];
 
 export default function SubjectPicker({ onComplete, onBack }: Props) {
@@ -183,22 +184,22 @@ export default function SubjectPicker({ onComplete, onBack }: Props) {
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center px-6 py-12">
+    <div className="min-h-screen flex flex-col items-center px-6 py-12 bg-white pt-24">
       {/* Back button */}
       <button
         onClick={goBack}
-        className="self-start mb-8 text-white/40 hover:text-white text-sm transition-colors flex items-center gap-1"
+        className="self-start mb-8 text-[#4b6b50] hover:text-[#1a2e1c] text-sm transition-colors flex items-center gap-1"
       >
         <span>←</span> Back
       </button>
 
       {/* Error banner */}
       {error && (
-        <div className="w-full max-w-2xl mb-6 rounded-xl border border-red-500/30 bg-red-500/10 px-5 py-3">
-          <p className="text-red-400 text-sm">⚠ {error}</p>
+        <div className="w-full max-w-2xl mb-6 rounded-xl border border-red-200 bg-red-50 px-5 py-3">
+          <p className="text-red-600 text-sm">⚠ {error}</p>
           <button
             onClick={() => setError('')}
-            className="text-red-400/60 text-xs mt-1 hover:text-red-400 transition-colors"
+            className="text-red-400 text-xs mt-1 hover:text-red-600 transition-colors"
           >
             Dismiss
           </button>
@@ -208,23 +209,25 @@ export default function SubjectPicker({ onComplete, onBack }: Props) {
       {/* ─── Step: Choose Path ─────────────────────────────────────────────── */}
       {step === 'path' && (
         <div className="w-full max-w-2xl flex flex-col items-center">
-          <h1 className="text-3xl font-bold mb-2 text-center">How do you want to learn?</h1>
-          <p className="text-white/50 mb-10 text-center">Choose the path that fits your situation</p>
+          <h1 className="text-3xl font-bold mb-2 text-center text-[#1a2e1c]">How do you want to learn?</h1>
+          <p className="text-[#4b6b50] mb-10 text-center">Choose the path that fits your situation</p>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full">
             {[
-              { key: 'A' as const, icon: '🧠', title: 'Teach me from scratch', desc: 'Pick any topic — AI builds a full curriculum tailored to your level.' },
-              { key: 'B' as const, icon: '📄', title: 'I have my own notes', desc: 'Upload a PDF or paste text — AI extracts concepts and quizzes you.' },
+              { key: 'A' as const, Icon: Brain,    title: 'Teach me from scratch', desc: 'Pick any topic — AI builds a full curriculum tailored to your level.' },
+              { key: 'B' as const, Icon: Document, title: 'I have my own notes',   desc: 'Upload a PDF or paste text — AI extracts concepts and quizzes you.' },
             ].map((p) => (
               <button
                 key={p.key}
                 id={`path-${p.key.toLowerCase()}-btn`}
                 onClick={() => { setPath(p.key); setStep(p.key === 'A' ? 'domain' : 'upload'); }}
-                className="text-left rounded-2xl border border-white/10 bg-white/5 p-6 hover:border-purple-500/50 hover:bg-white/[0.08] transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] group"
+                className="text-left rounded-2xl border border-[#d1e0d3] bg-[#f4f7f4] p-6 hover:border-green-400 hover:bg-[#e8f0e8] transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] group"
               >
-                <div className="text-4xl mb-3 group-hover:scale-110 transition-transform">{p.icon}</div>
-                <h2 className="font-semibold text-white mb-1 text-lg">{p.title}</h2>
-                <p className="text-sm text-white/50">{p.desc}</p>
+                <div className="w-12 h-12 rounded-xl bg-green-50 border border-green-200 flex items-center justify-center mb-3 group-hover:bg-green-100 transition-colors">
+                  <p.Icon className="w-6 h-6 text-green-700" />
+                </div>
+                <h2 className="font-semibold text-[#1a2e1c] mb-1 text-lg">{p.title}</h2>
+                <p className="text-sm text-[#4b6b50]">{p.desc}</p>
               </button>
             ))}
           </div>
@@ -234,32 +237,41 @@ export default function SubjectPicker({ onComplete, onBack }: Props) {
       {/* ─── Step: Domain Grid ─────────────────────────────────────────────── */}
       {step === 'domain' && (
         <div className="w-full max-w-3xl flex flex-col items-center">
-          <h1 className="text-3xl font-bold mb-2 text-center">Pick a subject</h1>
-          <p className="text-white/50 mb-10 text-center">Choose the domain you want to study</p>
+          <h1 className="text-3xl font-bold mb-2 text-center text-[#1a2e1c]">Pick a subject</h1>
+          <p className="text-[#4b6b50] mb-10 text-center">Choose the domain you want to study</p>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 w-full">
-            {DOMAINS.map((domain) => (
+            {DOMAINS.map((domain) => {
+              const DomainIcon = DOMAIN_ICONS[domain.id];
+              return (
               <button
                 key={domain.id}
                 id={`domain-${domain.id}`}
                 onClick={() => selectDomain(domain)}
-                className="flex flex-col items-center gap-2 rounded-2xl border border-white/10 bg-white/5 p-5 hover:bg-white/[0.08] transition-all duration-200 hover:scale-[1.04] active:scale-[0.97] group"
-                style={{
-                  borderColor: 'rgba(255,255,255,0.1)',
-                }}
+                className="flex flex-col items-center gap-2 rounded-2xl border border-[#d1e0d3] bg-[#f4f7f4] p-5 hover:bg-[#e8f0e8] transition-all duration-200 hover:scale-[1.04] active:scale-[0.97] group"
+                style={{ borderColor: '#d1e0d3' }}
                 onMouseEnter={(e) => {
-                  (e.currentTarget as HTMLElement).style.borderColor = domain.color + '60';
-                  (e.currentTarget as HTMLElement).style.boxShadow = `0 0 20px ${domain.color}15`;
+                  (e.currentTarget as HTMLElement).style.borderColor = domain.color + '90';
+                  (e.currentTarget as HTMLElement).style.boxShadow = `0 0 16px ${domain.color}20`;
                 }}
                 onMouseLeave={(e) => {
-                  (e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,255,255,0.1)';
+                  (e.currentTarget as HTMLElement).style.borderColor = '#d1e0d3';
                   (e.currentTarget as HTMLElement).style.boxShadow = 'none';
                 }}
               >
-                <span className="text-3xl group-hover:scale-110 transition-transform">{domain.icon}</span>
-                <span className="text-sm font-medium text-white/80">{domain.name}</span>
+                <div
+                  className="w-10 h-10 rounded-xl flex items-center justify-center"
+                  style={{ background: domain.color + '18', border: `1px solid ${domain.color}30` }}
+                >
+                  {DomainIcon
+                    ? <DomainIcon className="w-5 h-5" style={{ color: domain.color }} />
+                    : <span className="text-xl">{domain.icon}</span>
+                  }
+                </div>
+                <span className="text-sm font-medium text-[#4b6b50] group-hover:text-[#1a2e1c] transition-colors">{domain.name}</span>
               </button>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
@@ -269,9 +281,9 @@ export default function SubjectPicker({ onComplete, onBack }: Props) {
         <div className="w-full max-w-lg flex flex-col items-center">
           <div className="flex items-center gap-3 mb-2">
             <span className="text-3xl">{selectedDomain.icon}</span>
-            <h1 className="text-3xl font-bold">{selectedDomain.name}</h1>
+            <h1 className="text-3xl font-bold text-[#1a2e1c]">{selectedDomain.name}</h1>
           </div>
-          <p className="text-white/50 mb-8 text-center">Choose a specific topic to study</p>
+          <p className="text-[#4b6b50] mb-8 text-center">Choose a specific topic to study</p>
 
           <div className="w-full space-y-2 mb-6">
             {selectedDomain.topics.map((topic) => (
@@ -279,16 +291,13 @@ export default function SubjectPicker({ onComplete, onBack }: Props) {
                 key={topic}
                 id={`topic-${topic.toLowerCase().replace(/\s+/g, '-')}`}
                 onClick={() => selectTopic(topic)}
-                className="w-full text-left px-5 py-4 rounded-xl border border-white/10 bg-white/5 hover:border-purple-500/40 hover:bg-white/[0.08] transition-all duration-150 text-white/80 hover:text-white font-medium"
-                style={{
-                  borderLeftWidth: '3px',
-                  borderLeftColor: selectedDomain.color + '40',
-                }}
+                className="w-full text-left px-5 py-4 rounded-xl border border-[#d1e0d3] bg-[#f4f7f4] hover:border-green-400 hover:bg-[#e8f0e8] transition-all duration-150 text-[#4b6b50] hover:text-[#1a2e1c] font-medium"
+                style={{ borderLeftWidth: '3px', borderLeftColor: selectedDomain.color + '50' }}
                 onMouseEnter={(e) => {
                   (e.currentTarget as HTMLElement).style.borderLeftColor = selectedDomain.color;
                 }}
                 onMouseLeave={(e) => {
-                  (e.currentTarget as HTMLElement).style.borderLeftColor = selectedDomain.color + '40';
+                  (e.currentTarget as HTMLElement).style.borderLeftColor = selectedDomain.color + '50';
                 }}
               >
                 {topic}
@@ -296,9 +305,8 @@ export default function SubjectPicker({ onComplete, onBack }: Props) {
             ))}
           </div>
 
-          {/* Custom topic input */}
           <div className="w-full">
-            <p className="text-xs text-white/40 mb-2 text-center">— or type your own —</p>
+            <p className="text-xs text-[#4b6b50]/60 mb-2 text-center">— or type your own —</p>
             <div className="flex gap-2">
               <input
                 id="custom-topic-input"
@@ -306,12 +314,12 @@ export default function SubjectPicker({ onComplete, onBack }: Props) {
                 value={customTopic}
                 onChange={(e) => setCustomTopic(e.target.value)}
                 placeholder={`e.g. "Photosynthesis in C4 plants"`}
-                className="flex-1 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder-white/30 outline-none focus:border-purple-500/60 transition-colors text-sm"
+                className="flex-1 rounded-xl border border-[#d1e0d3] bg-white px-4 py-3 text-[#1a2e1c] placeholder-[#4b6b50]/50 outline-none focus:border-green-500 transition-colors text-sm"
               />
               <button
                 onClick={() => { if (customTopic.trim()) selectTopic(customTopic.trim()); }}
                 disabled={!customTopic.trim()}
-                className="px-5 py-3 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-30 disabled:cursor-not-allowed text-white font-medium text-sm transition-all"
+                className="px-5 py-3 rounded-xl bg-green-600 hover:bg-green-500 disabled:opacity-30 disabled:cursor-not-allowed text-white font-medium text-sm transition-all"
               >
                 Go →
               </button>
@@ -323,9 +331,9 @@ export default function SubjectPicker({ onComplete, onBack }: Props) {
       {/* ─── Step: Intent Selector ─────────────────────────────────────────── */}
       {step === 'intent' && (
         <div className="w-full max-w-lg flex flex-col items-center">
-          <h1 className="text-3xl font-bold mb-2 text-center">What's your goal?</h1>
-          <p className="text-white/50 mb-8 text-center">
-            Studying <span className="text-purple-400 font-medium">{selectedTopic || customTopic}</span>
+          <h1 className="text-3xl font-bold mb-2 text-center text-[#1a2e1c]">What's your goal?</h1>
+          <p className="text-[#4b6b50] mb-8 text-center">
+            Studying <span className="text-green-600 font-medium">{selectedTopic || customTopic}</span>
           </p>
 
           <div className="w-full space-y-3">
@@ -334,13 +342,15 @@ export default function SubjectPicker({ onComplete, onBack }: Props) {
                 key={opt.value}
                 id={`intent-${opt.value}`}
                 onClick={() => selectIntent(opt.value)}
-                className="w-full text-left px-5 py-4 rounded-xl border border-white/10 bg-white/5 hover:border-purple-500/40 hover:bg-white/[0.08] transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] group"
+                className="w-full text-left px-5 py-4 rounded-xl border border-[#d1e0d3] bg-[#f4f7f4] hover:border-green-400 hover:bg-[#e8f0e8] transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] group"
               >
                 <div className="flex items-center gap-3">
-                  <span className="text-2xl group-hover:scale-110 transition-transform">{opt.icon}</span>
+                  <div className="w-9 h-9 rounded-lg bg-green-50 border border-green-200 flex items-center justify-center flex-shrink-0 group-hover:bg-green-100 transition-colors">
+                    <opt.Icon className="w-4 h-4 text-green-700" />
+                  </div>
                   <div>
-                    <span className="font-semibold text-white">{opt.label}</span>
-                    <p className="text-sm text-white/50 mt-0.5">{opt.desc}</p>
+                    <span className="font-semibold text-[#1a2e1c]">{opt.label}</span>
+                    <p className="text-sm text-[#4b6b50] mt-0.5">{opt.desc}</p>
                   </div>
                 </div>
               </button>
@@ -352,52 +362,51 @@ export default function SubjectPicker({ onComplete, onBack }: Props) {
       {/* ─── Step: Diagnostic Quiz ─────────────────────────────────────────── */}
       {step === 'diagnostic' && currentQ && (
         <div className="w-full max-w-lg flex flex-col items-center">
-          <h1 className="text-2xl font-bold mb-1 text-center">Quick Diagnostic</h1>
-          <p className="text-white/50 mb-6 text-center text-sm">
+          <h1 className="text-2xl font-bold mb-1 text-center text-[#1a2e1c]">Quick Diagnostic</h1>
+          <p className="text-[#4b6b50] mb-6 text-center text-sm">
             Answer questions to calibrate your level — skip ahead anytime
           </p>
 
-          {/* Progress dots */}
           <div className="flex gap-1.5 mb-6">
             {diagnosticQuestions.map((_, i) => (
               <div
                 key={i}
                 className={`w-2.5 h-2.5 rounded-full transition-all duration-300 ${
                   i === currentQIndex
-                    ? 'bg-purple-500 scale-125'
+                    ? 'bg-green-600 scale-125'
                     : answers[i] !== null
                     ? answers[i] === diagnosticQuestions[i].correctIndex
-                      ? 'bg-emerald-500'
+                      ? 'bg-green-500'
                       : 'bg-red-400'
-                    : 'bg-white/15'
+                    : 'bg-[#d1e0d3]'
                 }`}
               />
             ))}
           </div>
 
-          {/* Question card */}
-          <div className="w-full rounded-2xl border border-white/10 bg-white/5 p-6 mb-4">
+          <div className="w-full rounded-2xl border border-[#d1e0d3] bg-white p-6 mb-4 shadow-sm">
             <div className="flex items-center justify-between mb-4">
-              <span className="text-xs text-white/40">
+              <span className="text-xs text-[#4b6b50]">
                 Question {currentQIndex + 1} of {diagnosticQuestions.length}
               </span>
-              <span className="text-xs text-white/40">
-                {['🟢 Easy', '🟡 Medium', '🔴 Hard'][currentQ.difficulty - 1]}
+              <span className="text-xs text-[#4b6b50]">
+                {currentQ.difficulty === 1 ? 'Easy' : currentQ.difficulty === 2 ? 'Medium' : 'Hard'}
+                <span className={`ml-1 inline-block w-2 h-2 rounded-full ${currentQ.difficulty === 1 ? 'bg-green-500' : currentQ.difficulty === 2 ? 'bg-amber-400' : 'bg-red-400'}`} />
               </span>
             </div>
-            <p className="text-white text-lg font-medium leading-relaxed mb-6">{currentQ.question}</p>
+            <p className="text-[#1a2e1c] text-lg font-medium leading-relaxed mb-6">{currentQ.question}</p>
 
             <div className="space-y-2">
               {currentQ.options.map((option, i) => {
-                let optionClass = 'border-white/10 bg-white/5 text-white/70 hover:border-white/25 hover:bg-white/[0.08]';
+                let optionClass = 'border-[#d1e0d3] bg-[#f4f7f4] text-[#4b6b50] hover:border-green-400 hover:bg-[#e8f0e8]';
 
                 if (showingFeedback) {
                   if (i === currentQ.correctIndex) {
-                    optionClass = 'border-emerald-500/60 bg-emerald-500/15 text-emerald-300';
+                    optionClass = 'border-green-400 bg-green-50 text-green-700';
                   } else if (i === selectedOption && i !== currentQ.correctIndex) {
-                    optionClass = 'border-red-500/60 bg-red-500/15 text-red-300';
+                    optionClass = 'border-red-300 bg-red-50 text-red-600';
                   } else {
-                    optionClass = 'border-white/5 bg-white/[0.02] text-white/30';
+                    optionClass = 'border-[#d1e0d3] bg-white text-[#4b6b50]/40';
                   }
                 }
 
@@ -408,7 +417,7 @@ export default function SubjectPicker({ onComplete, onBack }: Props) {
                     disabled={showingFeedback}
                     className={`w-full text-left px-4 py-3 rounded-xl border transition-all duration-200 text-sm ${optionClass} disabled:cursor-default`}
                   >
-                    <span className="font-medium mr-2 text-white/40">{String.fromCharCode(65 + i)}.</span>
+                    <span className="font-medium mr-2 text-[#4b6b50]/60">{String.fromCharCode(65 + i)}.</span>
                     {option}
                   </button>
                 );
@@ -416,16 +425,15 @@ export default function SubjectPicker({ onComplete, onBack }: Props) {
             </div>
           </div>
 
-          {/* Score + navigate */}
           <div className="w-full flex items-center justify-between">
-            <div className="text-sm text-white/40">
+            <div className="text-sm text-[#4b6b50]">
               {answeredCount > 0 && (
                 <span>
                   {diagnosticResult.score}/{answeredCount} correct •{' '}
                   <span className={
-                    diagnosticResult.level === 'advanced' ? 'text-emerald-400' :
-                    diagnosticResult.level === 'intermediate' ? 'text-yellow-400' :
-                    'text-orange-400'
+                    diagnosticResult.level === 'advanced' ? 'text-green-600' :
+                    diagnosticResult.level === 'intermediate' ? 'text-amber-600' :
+                    'text-orange-500'
                   }>
                     {diagnosticResult.level}
                   </span>
@@ -433,12 +441,11 @@ export default function SubjectPicker({ onComplete, onBack }: Props) {
               )}
             </div>
 
-            {/* Navigation between questions */}
             <div className="flex gap-2">
               {currentQIndex > 0 && (
                 <button
                   onClick={() => { setCurrentQIndex(currentQIndex - 1); setShowingFeedback(false); setSelectedOption(null); }}
-                  className="px-3 py-1.5 text-xs text-white/40 hover:text-white/70 transition-colors"
+                  className="px-3 py-1.5 text-xs text-[#4b6b50] hover:text-[#1a2e1c] transition-colors"
                 >
                   ← Prev
                 </button>
@@ -446,7 +453,7 @@ export default function SubjectPicker({ onComplete, onBack }: Props) {
               {currentQIndex < diagnosticQuestions.length - 1 && answers[currentQIndex] !== null && (
                 <button
                   onClick={() => { setCurrentQIndex(currentQIndex + 1); setShowingFeedback(false); setSelectedOption(null); }}
-                  className="px-3 py-1.5 text-xs text-white/40 hover:text-white/70 transition-colors"
+                  className="px-3 py-1.5 text-xs text-[#4b6b50] hover:text-[#1a2e1c] transition-colors"
                 >
                   Next →
                 </button>
@@ -454,25 +461,23 @@ export default function SubjectPicker({ onComplete, onBack }: Props) {
             </div>
           </div>
 
-          {/* Generate button — appears after at least 1 answer */}
           {answeredCount >= 1 && (
             <button
               id="generate-curriculum-btn"
               onClick={handleGenerateCurriculum}
-              className="w-full mt-6 py-4 rounded-2xl bg-purple-600 hover:bg-purple-500 text-white font-semibold text-lg transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-purple-500/20"
+              className="w-full mt-6 py-4 rounded-2xl bg-green-600 hover:bg-green-500 text-white font-semibold text-lg transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] shadow-md shadow-green-200"
             >
               Build My Learning Path →
             </button>
           )}
 
-          {/* Skip diagnostic */}
           {answeredCount === 0 && (
             <button
               onClick={() => {
                 const topic = selectedTopic || customTopic;
                 startGeneration(topic, intent, 'intermediate');
               }}
-              className="mt-6 text-sm text-white/30 hover:text-white/60 transition-colors"
+              className="mt-6 text-sm text-[#4b6b50] hover:text-[#1a2e1c] transition-colors"
             >
               Skip diagnostic (assume intermediate level)
             </button>
@@ -483,12 +488,11 @@ export default function SubjectPicker({ onComplete, onBack }: Props) {
       {/* ─── Step: Upload Notes (Path B) ───────────────────────────────────── */}
       {step === 'upload' && (
         <div className="w-full max-w-lg flex flex-col items-center">
-          <h1 className="text-3xl font-bold mb-2 text-center">Upload your notes</h1>
-          <p className="text-white/50 mb-8 text-center">Upload a PDF or paste your study material</p>
+          <h1 className="text-3xl font-bold mb-2 text-center text-[#1a2e1c]">Upload your notes</h1>
+          <p className="text-[#4b6b50] mb-8 text-center">Upload a PDF or paste your study material</p>
 
-          {/* File upload zone */}
           <div
-            className="w-full rounded-2xl border-2 border-dashed border-white/15 bg-white/[0.03] p-8 text-center mb-4 hover:border-purple-500/40 transition-colors cursor-pointer"
+            className="w-full rounded-2xl border-2 border-dashed border-[#d1e0d3] bg-[#f4f7f4] p-8 text-center mb-4 hover:border-green-400 transition-colors cursor-pointer"
             onClick={() => fileInputRef.current?.click()}
           >
             <input
@@ -499,48 +503,46 @@ export default function SubjectPicker({ onComplete, onBack }: Props) {
               className="hidden"
             />
             {file ? (
-              <div>
-                <span className="text-3xl">📄</span>
-                <p className="text-white font-medium mt-2">{file.name}</p>
-                <p className="text-sm text-white/40 mt-1">{(file.size / 1024).toFixed(1)} KB</p>
+              <div className="flex flex-col items-center">
+                <FileText className="w-10 h-10 text-green-600 mb-2" />
+                <p className="text-[#1a2e1c] font-medium">{file.name}</p>
+                <p className="text-sm text-[#4b6b50] mt-1">{(file.size / 1024).toFixed(1)} KB</p>
                 <button
                   onClick={(e) => { e.stopPropagation(); setFile(null); }}
-                  className="text-xs text-red-400/60 hover:text-red-400 mt-2 transition-colors"
+                  className="text-xs text-red-500 hover:text-red-600 mt-2 transition-colors"
                 >
                   Remove
                 </button>
               </div>
             ) : (
-              <div>
-                <span className="text-3xl">📁</span>
-                <p className="text-white/60 mt-2">Click to upload a PDF or text file</p>
-                <p className="text-xs text-white/30 mt-1">Max 5MB • PDF or TXT</p>
+              <div className="flex flex-col items-center">
+                <FolderOpen className="w-10 h-10 text-[#4b6b50] mb-2" />
+                <p className="text-[#4b6b50] mt-1">Click to upload a PDF or text file</p>
+                <p className="text-xs text-[#4b6b50]/50 mt-1">Max 5MB • PDF or TXT</p>
               </div>
             )}
           </div>
 
-          {/* Divider */}
           <div className="flex items-center gap-4 w-full my-4">
-            <div className="flex-1 h-px bg-white/10" />
-            <span className="text-xs text-white/30">or paste text</span>
-            <div className="flex-1 h-px bg-white/10" />
+            <div className="flex-1 h-px bg-[#d1e0d3]" />
+            <span className="text-xs text-[#4b6b50]/60">or paste text</span>
+            <div className="flex-1 h-px bg-[#d1e0d3]" />
           </div>
 
-          {/* Text area */}
           <textarea
             id="notes-input"
             value={notes}
             onChange={(e) => { setNotes(e.target.value); setFile(null); }}
             placeholder="Paste your class notes, textbook excerpt, or any study material here…"
             rows={8}
-            className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder-white/30 outline-none focus:border-purple-500/60 transition-colors resize-none mb-6 text-sm"
+            className="w-full rounded-xl border border-[#d1e0d3] bg-white px-4 py-3 text-[#1a2e1c] placeholder-[#4b6b50]/50 outline-none focus:border-green-500 transition-colors resize-none mb-6 text-sm"
           />
 
           <button
             id="extract-notes-btn"
             onClick={handleNotesSubmit}
             disabled={!file && !notes.trim()}
-            className="w-full py-4 rounded-2xl bg-purple-600 hover:bg-purple-500 disabled:opacity-30 disabled:cursor-not-allowed text-white font-semibold text-lg transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-purple-500/20"
+            className="w-full py-4 rounded-2xl bg-green-600 hover:bg-green-500 disabled:opacity-30 disabled:cursor-not-allowed text-white font-semibold text-lg transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] shadow-md shadow-green-200"
           >
             Extract Concepts →
           </button>
